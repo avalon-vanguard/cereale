@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimus - Spring-like JSON Mapping & Validation for TypeScript</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+    <script src="optimus.js"></script>
+    <style>
+        .CodeMirror {
+            height: 400px;
+            border-radius: 0.5rem;
+            font-size: 14px;
+        }
+        .gradient-text {
+            background: linear-gradient(to right, #6366f1, #a855f7, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans">
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center">
+                    <span class="text-2xl font-bold gradient-text">Optimus</span>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="#features" class="text-slate-600 hover:text-indigo-600 px-3 py-2 font-medium">Features</a>
+                        <a href="#playground" class="text-slate-600 hover:text-indigo-600 px-3 py-2 font-medium">Playground</a>
+                        <a href="#docs" class="text-slate-600 hover:text-indigo-600 px-3 py-2 font-medium">Docs</a>
+                        <a href="https://github.com/Avalon-Vanguard/optimus" class="bg-indigo-600 text-white px-4 py-2 rounded-md font-medium hover:bg-indigo-700 transition">GitHub</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <!-- Hero Section -->
+        <section class="py-20 px-4">
+            <div class="max-w-4xl mx-auto text-center">
+                <h1 class="text-5xl md:text-6xl font-extrabold mb-6">
+                    <span class="gradient-text">Spring-like</span> JSON Mapping <br>& Validation for TypeScript
+                </h1>
+                <p class="text-xl text-slate-600 mb-10">
+                    A lightweight library with <span class="font-bold">ZERO external dependencies</span>. 
+                    Simplify your data layer with familiar decorators.
+                </p>
+                <div class="flex justify-center gap-4">
+                    <a href="#playground" class="bg-indigo-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition">Try on the fly</a>
+                    <code class="bg-slate-800 text-slate-100 px-6 py-3 rounded-lg text-lg font-mono flex items-center">
+                        npm install optimus
+                    </code>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features -->
+        <section id="features" class="py-20 bg-white">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 class="text-3xl font-bold text-center mb-16">Why Optimus?</h2>
+                <div class="grid md:grid-cols-3 gap-8">
+                    <div class="p-6 rounded-xl bg-slate-50 border border-slate-100">
+                        <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4 text-indigo-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Blazing Fast</h3>
+                        <p class="text-slate-600">Zero overhead. Only uses decorators and metadata to handle mapping and validation.</p>
+                    </div>
+                    <div class="p-6 rounded-xl bg-slate-50 border border-slate-100">
+                        <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4 text-purple-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.040L3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622l-.382-3.016z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Integrated Validation</h3>
+                        <p class="text-slate-600">Validate while you map. Ensure your data is correct before it even hits your business logic.</p>
+                    </div>
+                    <div class="p-6 rounded-xl bg-slate-50 border border-slate-100">
+                        <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center mb-4 text-pink-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a2 2 0 00-1.96 1.414l-.477 2.387a2 2 0 00.547 1.022l1.428 1.428a2 2 0 002.828 0l1.428-1.428a2 2 0 000-2.828l-1.428-1.428z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Polymorphism</h3>
+                        <p class="text-slate-600">Native support for complex hierarchies. Map to the right subclass automatically based on a discriminator.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Playground -->
+        <section id="playground" class="py-20 bg-slate-900 text-white">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+                    <div>
+                        <h2 class="text-3xl font-bold">Interactive Playground</h2>
+                        <p class="text-slate-400 mt-2">Edit the code below and see the result in real-time.</p>
+                    </div>
+                    <button id="run-btn" class="bg-indigo-600 hover:bg-indigo-500 px-8 py-3 rounded-lg font-bold transition flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                        </svg>
+                        Run Code
+                    </button>
+                </div>
+
+                <div class="grid lg:grid-cols-2 gap-6">
+                    <div>
+                        <div class="bg-slate-800 rounded-t-lg px-4 py-2 text-sm font-mono text-slate-400 border-b border-slate-700">TypeScript / Optimus</div>
+                        <textarea id="editor"></textarea>
+                    </div>
+                    <div class="flex flex-col">
+                        <div class="bg-slate-800 rounded-t-lg px-4 py-2 text-sm font-mono text-slate-400 border-b border-slate-700">Output</div>
+                        <pre id="output" class="bg-slate-950 p-6 rounded-b-lg font-mono text-sm overflow-auto flex-grow" style="height: 400px; color: #a9b7c6;"></pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Docs Summary -->
+        <section id="docs" class="py-20 bg-white">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 class="text-3xl font-bold text-center mb-16">Available Decorators</h2>
+                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div>
+                        <h3 class="font-bold text-lg mb-4 text-indigo-600">Mapping</h3>
+                        <ul class="space-y-2 text-slate-600">
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonSerialize(cls)</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonDeserialize(cls)</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonType(() => cls)</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonPolymorphic(field, types)</code></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg mb-4 text-purple-600">Basic Validation</h3>
+                        <ul class="space-y-2 text-slate-600">
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@IsString()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsNumber()</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@IsInt()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsBoolean()</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@IsDate()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsObject()</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@IsNotEmpty()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsDefined()</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@Positive()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@Negative()</code></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg mb-4 text-pink-600">Advanced Validation</h3>
+                        <ul class="space-y-2 text-slate-600">
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@Min(n)</code>, <code class="text-sm bg-slate-100 p-1 rounded">@Max(n)</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@MinLength(n)</code>, <code class="text-sm bg-slate-100 p-1 rounded">@MaxLength(n)</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@Email()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsUrl()</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@ValidateNested()</code></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-slate-50 border-t border-slate-200 py-12">
+        <div class="max-w-7xl mx-auto px-4 text-center text-slate-500">
+            <p>© 2026 Optimus Library. Licensed under MIT.</p>
+        </div>
+    </footer>
+
+    <script>
+        const initialCode = `// 1. Define your model with decorators
+class User {
+  @IsString()
+  @MinLength(3)
+  name;
+
+  @IsInt()
+  @Min(18)
+  age;
+
+  @Email()
+  email;
+
+  constructor(name, age, email) {
+    this.name = name;
+    this.age = age;
+    this.email = email;
+  }
+}
+
+async function demo() {
+  console.log("--- Validating valid user ---");
+  const user = new User("Alice", 25, "alice@example.com");
+  const json = await JsonMapper.toJson(user);
+  console.log("JSON Output:", json);
+
+  console.log("\\n--- Testing validation failure ---");
+  try {
+    const invalidJson = '{"name": "Bo", "age": 15, "email": "not-an-email"}';
+    await JsonMapper.fromJson(User, invalidJson);
+  } catch (error) {
+    console.log("Caught Error:", error.message);
+    console.log("Validation Errors:", JSON.stringify(error.errors, null, 2));
+  }
+}
+
+demo();`;
+
+        const editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+            mode: 'javascript',
+            theme: 'dracula',
+            lineNumbers: true,
+            indentUnit: 2,
+            tabSize: 2,
+        });
+        editor.setValue(initialCode);
+
+        const outputElement = document.getElementById('output');
+        const runBtn = document.getElementById('run-btn');
+
+        // Custom console.log to show output in the pre element
+        const originalLog = console.log;
+        function logToOutput(...args) {
+            originalLog(...args);
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+            outputElement.textContent += message + '\\n';
+        }
+
+        runBtn.addEventListener('click', async () => {
+            outputElement.textContent = '';
+            const code = editor.getValue();
+            
+            try {
+                // Transpile TypeScript-like code to JS with decorators support
+                const transpiled = Babel.transform(code, {
+                    presets: ['env', 'typescript'],
+                    plugins: [
+                        ['proposal-decorators', { legacy: true }],
+                        ['proposal-class-properties', { loose: true }]
+                    ]
+                }).code;
+
+                // Create a function with the library symbols in scope
+                const { 
+                    IsString, IsInt, Min, Max, IsEmail, IsArray, IsDate, IsOptional, ValidateNested, 
+                    IsBoolean, IsNumber, IsObject, IsDefined, IsNotEmpty, MinLength, MaxLength,
+                    Email, IsUrl, Matches, ArrayMinSize, ArrayMaxSize, ArrayNotEmpty, IsIn, IsNotIn,
+                    Positive, Negative,
+                    JsonSerialize, JsonDeserialize, JsonPolymorphic, JsonType, JsonMapper, 
+                    JsonValidationError 
+                } = Optimus;
+
+                const run = new Function(
+                    'console', 
+                    'IsString', 'IsInt', 'Min', 'Max', 'IsEmail', 'IsArray', 'IsDate', 'IsOptional', 'ValidateNested',
+                    'IsBoolean', 'IsNumber', 'IsObject', 'IsDefined', 'IsNotEmpty', 'MinLength', 'MaxLength',
+                    'Email', 'IsUrl', 'Matches', 'ArrayMinSize', 'ArrayMaxSize', 'ArrayNotEmpty', 'IsIn', 'IsNotIn',
+                    'Positive', 'Negative',
+                    'JsonSerialize', 'JsonDeserialize', 'JsonPolymorphic', 'JsonType', 'JsonMapper', 
+                    'JsonValidationError',
+                    transpiled
+                );
+
+                await run(
+                    { log: logToOutput },
+                    IsString, IsInt, Min, Max, IsEmail, IsArray, IsDate, IsOptional, ValidateNested,
+                    IsBoolean, IsNumber, IsObject, IsDefined, IsNotEmpty, MinLength, MaxLength,
+                    Email, IsUrl, Matches, ArrayMinSize, ArrayMaxSize, ArrayNotEmpty, IsIn, IsNotIn,
+                    Positive, Negative,
+                    JsonSerialize, JsonDeserialize, JsonPolymorphic, JsonType, JsonMapper, 
+                    JsonValidationError
+                );
+            } catch (err) {
+                outputElement.textContent += 'Error: ' + err.message + '\\n';
+                if (err.stack) {
+                    // originalLog(err.stack);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

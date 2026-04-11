@@ -1,0 +1,41 @@
+{
+  "name": "optimus",
+  "version": "1.0.0",
+  "description": "Spring-like decorators for JSON mapping and validation in TypeScript",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "demo": "ts-node src/example.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Avalon-Vanguard/optimus.git"
+  },
+  "keywords": [
+    "json",
+    "mapping",
+    "validation",
+    "decorators",
+    "spring",
+    "typescript"
+  ],
+  "author": "Avalon Vanguard",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Avalon-Vanguard/optimus/issues"
+  },
+  "homepage": "https://github.com/Avalon-Vanguard/optimus#readme",
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  }
+}
