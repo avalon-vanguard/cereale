@@ -1,6 +1,6 @@
-# Contributing to Optimus
+# Contributing to Cereale
 
-Thank you for your interest in contributing to Optimus! We welcome all contributions, from bug reports to new features and documentation improvements.
+Thank you for your interest in contributing to Cereale! We welcome all contributions, from bug reports to new features and documentation improvements.
 
 ## Development Setup
 
@@ -8,8 +8,8 @@ To get started with development, follow these steps:
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/Avalon-Vanguard/optimus.git
-    cd optimus
+    git clone https://github.com/Avalon-Vanguard/cereale.git
+    cd cereale
     ```
 
 2.  **Install dependencies:**
@@ -56,4 +56,4 @@ Please use GitHub Issues to report bugs or suggest new features. Provide as much
 
 ---
 
-By contributing to this project, you agree to abide by the terms of the ISC License.
+By contributing to this project, you agree to abide by the terms of the MIT License.

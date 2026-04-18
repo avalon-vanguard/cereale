@@ -6,8 +6,8 @@
     "outDir": "dist",
 
     // Environment Settings
-    "module": "CommonJS",
-    "target": "ES2020",
+    "module": "NodeNext",
+    "target": "ES2025",
     "lib": ["ESNext"],
     "types": ["node"],
 
@@ -36,5 +36,5 @@
     "experimentalDecorators": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/example.ts"]
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
 }

@@ -1,14 +1,14 @@
-import { JsonSerializer, JsonDeserializer, ClassConstructor } from './interfaces';
-import { metadataStorage } from './metadata-storage';
+import { JsonSerializer, JsonDeserializer, ClassConstructor } from './interfaces.js';
+import { metadataStorage } from './metadata-storage.js';
 
 export const METADATA_KEYS = {
-  PROPERTIES: 'optimus:properties',
-  TYPE: 'optimus:type',
-  VALIDATION: 'optimus:validation',
-  SERIALIZER: 'optimus:serializer',
-  DESERIALIZER: 'optimus:deserializer',
-  POLYMORPHIC: 'optimus:polymorphic',
-  IS_OPTIONAL: 'optimus:optional',
+  PROPERTIES: 'cereale:properties',
+  TYPE: 'cereale:type',
+  VALIDATION: 'cereale:validation',
+  SERIALIZER: 'cereale:serializer',
+  DESERIALIZER: 'cereale:deserializer',
+  POLYMORPHIC: 'cereale:polymorphic',
+  IS_OPTIONAL: 'cereale:optional',
 };
 
 export interface ValidationArguments {
@@ -445,7 +445,7 @@ export function ValidateNested() {
   return (target: any, propertyKey: string) => {
     registerProperty(target, propertyKey);
     // This is a marker for recursive validation
-    metadataStorage.defineMetadata('optimus:nested', true, target, propertyKey);
+    metadataStorage.defineMetadata('cereale:nested', true, target, propertyKey);
   };
 }
 
@@ -472,7 +472,7 @@ export function Validate(
       // Functional validator
       addValidation(target, propertyKey, {
         name: 'custom',
-        validate: validator as (value: any, args: ValidationArguments) => boolean | Promise<boolean>,
+        validate: validator as (value: any, args: ValidationArguments) => boolean,
         message: (args) => `${args.property} is invalid`,
         constraints
       }, validationOptions);
@@ -494,7 +494,7 @@ export function Validate(
  */
 export function registerDecorator(options: {
   name: string;
-  target: Function;
+  target: any;
   propertyName: string;
   options?: ValidationOptions;
   constraints?: any[];
@@ -507,7 +507,7 @@ export function registerDecorator(options: {
   if (typeof validator === 'function' && !validator.prototype?.validate) {
     validationConstraint = {
       name,
-      validate: validator as (value: any, args: ValidationArguments) => boolean | Promise<boolean>,
+      validate: validator as (value: any, args: ValidationArguments) => boolean,
       message: (args) => `${args.property} is invalid`,
       ...(constraints ? { constraints } : {})
     };

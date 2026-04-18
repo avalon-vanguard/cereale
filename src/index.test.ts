@@ -4,7 +4,6 @@ import {
   IsBoolean,
   IsInt, 
   Min, 
-  Max,
   MinLength,
   MaxLength,
   Email,
@@ -22,7 +21,7 @@ import {
   JsonSerializer, 
   JsonDeserializer,
   JsonValidationError
-} from './index';
+} from './index.js';
 
 // --- Custom Serializers ---
 class DateSerializer implements JsonSerializer<Date, string> {

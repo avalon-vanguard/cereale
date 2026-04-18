@@ -8,7 +8,8 @@ import {
   JsonSerialize, 
   JsonDeserialize, 
   JsonPolymorphic, 
-  JsonMapper, 
+  toJson,
+  fromJson,
   JsonSerializer, 
   JsonDeserializer,
   Validate,
@@ -16,7 +17,7 @@ import {
   ValidationArguments,
   registerDecorator,
   ValidationOptions
-} from './index';
+} from './index.js';
 
 // --- Custom Validators ---
 
@@ -76,7 +77,7 @@ class Book extends Media {
 
   @IsString()
   @IsUsername({ message: 'Title must be a valid alphanumeric username' })
-  override title: string;
+  declare title: string;
 
   @IsString()
   @Validate(IsLongerThan, [5])
@@ -133,12 +134,12 @@ async function runExample() {
   try {
     // 2. Serialize to JSON
     console.log("\n[1] Serializing Library to JSON...");
-    const json = await JsonMapper.toJson(library);
+    const json = await toJson(library);
     console.log("JSON Output:", json);
 
     // 3. Deserialize back to Instance
     console.log("\n[2] Deserializing JSON back to Library instance...");
-    const deserializedLibrary = await JsonMapper.fromJson(Library, json);
+    const deserializedLibrary = await fromJson(Library, json);
     console.log("Deserialized Library Name:", deserializedLibrary.name);
     console.log("Items count:", deserializedLibrary.items.length);
 
@@ -162,7 +163,7 @@ async function runExample() {
       ]
     });
 
-    await JsonMapper.fromJson(Library, invalidJson);
+    await fromJson(Library, invalidJson);
   } catch (error) {
     if (error instanceof Error) {
       console.log("Caught expected error:", error.message);

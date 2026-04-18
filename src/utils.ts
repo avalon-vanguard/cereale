@@ -1,6 +1,6 @@
-import { ClassConstructor } from './interfaces';
-import { METADATA_KEYS, ValidationConstraint, ValidationArguments } from './decorators';
-import { metadataStorage } from './metadata-storage';
+import { ClassConstructor } from './interfaces.js';
+import { METADATA_KEYS, ValidationConstraint, ValidationArguments } from './decorators.js';
+import { metadataStorage } from './metadata-storage.js';
 
 export interface ValidationError {
   property: string;
@@ -20,237 +20,272 @@ export class JsonValidationError extends Error {
   }
 }
 
-export class JsonMapper {
-  /**
-   * Converts a class instance to a plain object with validation.
-   */
-  static async toPlain<T>(obj: T): Promise<any> {
-    if (obj === null || obj === undefined) return obj;
-    
-    // Validate first
-    const errors = await this.validate(obj);
-    if (errors.length > 0) {
-      throw new JsonValidationError('Validation failed during serialization', errors);
-    }
+// --- Internal Engine ---
 
-    return this.serialize(obj);
+async function serialize(obj: any): Promise<any> {
+  if (obj === null || obj === undefined || typeof obj !== 'object') {
+    return obj;
   }
 
-  /**
-   * Converts a class instance to a JSON string with validation.
-   */
-  static async toJson<T>(obj: T): Promise<string> {
-    const plain = await this.toPlain(obj);
-    return JSON.stringify(plain);
+  if (Array.isArray(obj)) {
+    return Promise.all(obj.map(item => serialize(item)));
   }
 
-  /**
-   * Converts a plain object to a class instance with validation.
-   */
-  static async toInstance<T>(clazz: ClassConstructor<T>, plain: any): Promise<T> {
-    const instance = this.deserialize(clazz, plain);
-    
-    const errors = await this.validate(instance);
-    if (errors.length > 0) {
-      throw new JsonValidationError('Validation failed during deserialization', errors);
-    }
-    
-    return instance;
+  if (obj instanceof Date) {
+    return obj.toISOString();
   }
 
-  /**
-   * Parses a JSON string to a class instance with validation.
-   */
-  static async fromJson<T>(clazz: ClassConstructor<T>, json: string): Promise<T> {
-    const plain = JSON.parse(json);
-    return this.toInstance(clazz, plain);
+  const target = obj.constructor.prototype;
+  
+  const result: any = {};
+  const allKeys = Object.keys(obj);
+  
+  for (const key of allKeys) {
+    const value = obj[key];
+    
+    // Check for custom serializer
+    const serializerCls = metadataStorage.getMetadata(METADATA_KEYS.SERIALIZER, target, key);
+    if (serializerCls) {
+      const serializer = new serializerCls();
+      result[key] = await serializer.serialize(value);
+    } else {
+      result[key] = await serialize(value);
+    }
   }
 
-  // --- Internal Engine ---
+  return result;
+}
 
-  private static serialize(obj: any): any {
-    if (obj === null || obj === undefined || typeof obj !== 'object') {
-      return obj;
+async function deserialize<T>(clazz: ClassConstructor<T>, plain: any): Promise<T> {
+  if (plain === null || plain === undefined) return plain;
+  
+  if (Array.isArray(plain)) {
+    const results = await Promise.all(plain.map(item => deserialize(clazz, item)));
+    return results as any;
+  }
+
+  const instance = new clazz();
+  const target = clazz.prototype;
+
+  // Copy all properties from plain to instance
+  for (const key of Object.keys(plain)) {
+    const value = plain[key];
+
+    // Custom Deserializer
+    const deserializerCls = metadataStorage.getMetadata(METADATA_KEYS.DESERIALIZER, target, key);
+    if (deserializerCls) {
+      const deserializer = new deserializerCls();
+      instance[key as keyof T] = await deserializer.deserialize(value);
+      continue;
     }
 
-    if (Array.isArray(obj)) {
-      return obj.map(item => this.serialize(item));
-    }
-
-    if (obj instanceof Date) {
-      return obj.toISOString();
-    }
-
-    const target = obj.constructor.prototype;
-    
-    // If no properties are registered with decorators, we might want to serialize everything
-    // But for a "lightweight lib" based on decorators, we only serialize registered properties?
-    // Actually, usually we serialize everything and only apply special logic to registered ones.
-    // Let's take all keys of the object.
-    const result: any = {};
-    const allKeys = Object.keys(obj);
-    
-    for (const key of allKeys) {
-      const value = obj[key];
-      
-      // Check for custom serializer
-      const serializerCls = metadataStorage.getMetadata(METADATA_KEYS.SERIALIZER, target, key);
-      if (serializerCls) {
-        const serializer = new serializerCls();
-        result[key] = serializer.serialize(value);
+    // Polymorphic
+    const poly = metadataStorage.getMetadata(METADATA_KEYS.POLYMORPHIC, target, key);
+    if (poly && value !== null && value !== undefined) {
+      const { discriminator, subTypes } = poly;
+      if (Array.isArray(value)) {
+        instance[key as keyof T] = await Promise.all(value.map(async item => {
+          const subTypeInfo = subTypes.find((s: any) => item[discriminator] === s.name);
+          return subTypeInfo ? deserialize(subTypeInfo.value, item) : item;
+        })) as any;
       } else {
-        result[key] = this.serialize(value);
+        const subTypeInfo = subTypes.find((s: any) => value[discriminator] === s.name);
+        if (subTypeInfo) {
+          instance[key as keyof T] = await deserialize(subTypeInfo.value, value);
+          continue;
+        }
       }
+      continue;
     }
 
-    return result;
+    // Nested Type
+    const typeFn = metadataStorage.getMetadata(METADATA_KEYS.TYPE, target, key);
+    if (typeFn && value !== null && value !== undefined) {
+      const type = typeFn();
+      instance[key as keyof T] = await deserialize(type, value);
+      continue;
+    }
+
+    instance[key as keyof T] = value;
   }
 
-  private static deserialize<T>(clazz: ClassConstructor<T>, plain: any): T {
-    if (plain === null || plain === undefined) return plain;
-    
-    if (Array.isArray(plain)) {
-      return plain.map(item => this.deserialize(clazz, item)) as any;
-    }
+  return instance;
+}
 
-    const instance = new clazz();
-    const target = clazz.prototype;
+// --- Public API Functions ---
 
-    // Copy all properties from plain to instance
-    for (const key of Object.keys(plain)) {
-      let value = plain[key];
+/**
+ * Validates a class instance or object against its decorators.
+ * @param obj The object to validate
+ * @returns Array of validation errors
+ */
+export async function validate(obj: any): Promise<ValidationError[]> {
+  const errors: ValidationError[] = [];
+  if (obj === null || obj === undefined || typeof obj !== 'object') return errors;
 
-      // Custom Deserializer
-      const deserializerCls = metadataStorage.getMetadata(METADATA_KEYS.DESERIALIZER, target, key);
-      if (deserializerCls) {
-        const deserializer = new deserializerCls();
-        instance[key as keyof T] = deserializer.deserialize(value);
-        continue;
-      }
-
-      // Polymorphic
-      const poly = metadataStorage.getMetadata(METADATA_KEYS.POLYMORPHIC, target, key);
-      if (poly && value !== null && value !== undefined) {
-        const { discriminator, subTypes } = poly;
-        if (Array.isArray(value)) {
-          instance[key as keyof T] = value.map(item => {
-            const subTypeInfo = subTypes.find((s: any) => item[discriminator] === s.name);
-            return subTypeInfo ? this.deserialize(subTypeInfo.value, item) : item;
-          }) as any;
-        } else {
-          const subTypeInfo = subTypes.find((s: any) => value[discriminator] === s.name);
-          if (subTypeInfo) {
-            instance[key as keyof T] = this.deserialize(subTypeInfo.value, value);
-            continue;
-          }
-        }
-        continue;
-      }
-
-      // Nested Type
-      const typeFn = metadataStorage.getMetadata(METADATA_KEYS.TYPE, target, key);
-      if (typeFn && value !== null && value !== undefined) {
-        const type = typeFn();
-        instance[key as keyof T] = this.deserialize(type, value);
-        continue;
-      }
-
-      instance[key as keyof T] = value;
-    }
-
-    return instance;
-  }
-
-  static async validate(obj: any): Promise<ValidationError[]> {
-    const errors: ValidationError[] = [];
-    if (obj === null || obj === undefined || typeof obj !== 'object') return errors;
-
-    if (Array.isArray(obj)) {
-      for (let i = 0; i < obj.length; i++) {
-        const childErrors = await this.validate(obj[i]);
-        if (childErrors.length > 0) {
-          errors.push({
-            property: `[${i}]`,
-            value: obj[i],
-            constraints: {},
-            children: childErrors
-          });
-        }
-      }
-      return errors;
-    }
-
-    const target = Object.getPrototypeOf(obj);
-    const properties: string[] = metadataStorage.getProperties(target);
-
-    for (const key of properties) {
-      const value = obj[key];
-      const propertyErrors: ValidationError = {
-        property: key,
-        value: value,
-        constraints: {}
-      };
-
-      // Handle IsOptional
-      const isOptional = metadataStorage.getMetadata(METADATA_KEYS.IS_OPTIONAL, target, key);
-      const isNullOrUndefined = value === null || value === undefined;
-
-      if (isOptional && isNullOrUndefined) {
-        continue;
-      }
-
-      // Check validation constraints
-      const constraints: ValidationConstraint[] = metadataStorage.getMetadata(METADATA_KEYS.VALIDATION, target, key) || [];
-      const validationArgs: ValidationArguments = {
-        value: value,
-        object: obj,
-        property: key,
-        constraints: []
-      };
-
-      for (const constraint of constraints) {
-        validationArgs.constraints = constraint.constraints || [];
-        
-        let isValid = true;
-        if (constraint.each && Array.isArray(value)) {
-          for (const item of value) {
-            const itemArgs = { ...validationArgs, value: item };
-            if (!(await constraint.validate(item, itemArgs))) {
-              isValid = false;
-              break;
-            }
-          }
-        } else {
-          isValid = await constraint.validate(value, validationArgs);
-        }
-
-        if (!isValid) {
-          let message = typeof constraint.message === 'function' 
-            ? constraint.message(validationArgs) 
-            : constraint.message;
-          
-          if (constraint.each) {
-            message = `each element in ${message}`;
-          }
-          
-          propertyErrors.constraints[constraint.name] = message;
-        }
-      }
-
-      // Recursive validation
-      const isNested = metadataStorage.getMetadata('optimus:nested', target, key);
-      if (isNested && value !== null && value !== undefined) {
-        const nestedErrors = await this.validate(value);
-        if (nestedErrors.length > 0) {
-          propertyErrors.children = nestedErrors;
-        }
-      }
-
-      if (Object.keys(propertyErrors.constraints).length > 0 || propertyErrors.children) {
-        errors.push(propertyErrors);
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) {
+      const childErrors = await validate(obj[i]);
+      if (childErrors.length > 0) {
+        errors.push({
+          property: `[${i}]`,
+          value: obj[i],
+          constraints: {},
+          children: childErrors
+        });
       }
     }
-
     return errors;
   }
+
+  const target = Object.getPrototypeOf(obj);
+  const properties: string[] = metadataStorage.getProperties(target);
+
+  for (const key of properties) {
+    const value = obj[key];
+    const propertyErrors: ValidationError = {
+      property: key,
+      value: value,
+      constraints: {}
+    };
+
+    // Handle IsOptional
+    const isOptional = metadataStorage.getMetadata(METADATA_KEYS.IS_OPTIONAL, target, key);
+    const isNullOrUndefined = value === null || value === undefined;
+
+    if (isOptional && isNullOrUndefined) {
+      continue;
+    }
+
+    // Check validation constraints
+    const constraints: ValidationConstraint[] = metadataStorage.getMetadata(METADATA_KEYS.VALIDATION, target, key) || [];
+    const validationArgs: ValidationArguments = {
+      value: value,
+      object: obj,
+      property: key,
+      constraints: []
+    };
+
+    for (const constraint of constraints) {
+      validationArgs.constraints = constraint.constraints || [];
+      
+      let isValid = true;
+      if (constraint.each && Array.isArray(value)) {
+        for (const item of value) {
+          const itemArgs = { ...validationArgs, value: item };
+          if (!(await constraint.validate(item, itemArgs))) {
+            isValid = false;
+            break;
+          }
+        }
+      } else {
+        isValid = await constraint.validate(value, validationArgs);
+      }
+
+      if (!isValid) {
+        let message = typeof constraint.message === 'function' 
+          ? constraint.message(validationArgs) 
+          : constraint.message;
+        
+        if (constraint.each) {
+          message = `each element in ${message}`;
+        }
+        
+        propertyErrors.constraints[constraint.name] = message;
+      }
+    }
+
+    // Recursive validation
+    const isNested = metadataStorage.getMetadata('cereale:nested', target, key);
+    if (isNested && value !== null && value !== undefined) {
+      const nestedErrors = await validate(value);
+      if (nestedErrors.length > 0) {
+        propertyErrors.children = nestedErrors;
+      }
+    }
+
+    if (Object.keys(propertyErrors.constraints).length > 0 || propertyErrors.children) {
+      errors.push(propertyErrors);
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * Converts a class instance to a plain object with validation.
+ * @param obj The class instance to transform
+ * @returns Plain object
+ */
+export async function toPlain<T>(obj: T): Promise<any> {
+  if (obj === null || obj === undefined) return obj;
+  
+  const errors = await validate(obj);
+  if (errors.length > 0) {
+    throw new JsonValidationError('Validation failed during serialization', errors);
+  }
+
+  return serialize(obj);
+}
+
+/**
+ * Converts a class instance to a JSON string with validation.
+ * @param obj The class instance to transform
+ * @returns JSON string
+ */
+export async function toJson<T>(obj: T): Promise<string> {
+  const plain = await toPlain(obj);
+  return JSON.stringify(plain);
+}
+
+/**
+ * Converts a plain object to a class instance with validation.
+ * @param clazz The class constructor
+ * @param plain The plain object to transform
+ * @returns Validated class instance
+ */
+export async function toInstance<T>(clazz: ClassConstructor<T>, plain: any): Promise<T> {
+  const instance = await deserialize(clazz, plain);
+  
+  const errors = await validate(instance);
+  if (errors.length > 0) {
+    throw new JsonValidationError('Validation failed during deserialization', errors);
+  }
+  
+  return instance;
+}
+
+/**
+ * Parses a JSON string to a class instance with validation.
+ * @param clazz The class constructor
+ * @param json JSON string
+ * @returns Validated class instance
+ */
+export async function fromJson<T>(clazz: ClassConstructor<T>, json: string): Promise<T> {
+  const plain = JSON.parse(json);
+  return toInstance(clazz, plain);
+}
+
+/**
+ * Helper for Fetch-based frameworks (Next.js, Hono, etc.)
+ * Extracts JSON from a Request and transforms it to a validated instance.
+ * @param clazz The class constructor
+ * @param request Web Request object
+ * @returns Validated class instance
+ */
+export async function fromRequest<T>(clazz: ClassConstructor<T>, request: Request): Promise<T> {
+  const plain = await request.json();
+  return toInstance(clazz, plain);
+}
+
+/**
+ * @deprecated Use standalone functions like toPlain, toInstance, etc.
+ */
+export class JsonMapper {
+  static toPlain = toPlain;
+  static toJson = toJson;
+  static toInstance = toInstance;
+  static fromJson = fromJson;
+  static fromRequest = fromRequest;
+  static validate = validate;
 }

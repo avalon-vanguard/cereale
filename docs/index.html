@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optimus - Spring-like JSON Mapping & Validation for TypeScript</title>
+    <title>Cereale - Spring-like JSON Mapping & Validation for TypeScript</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
-    <script src="optimus.js"></script>
+    <script src="cereale.js"></script>
     <style>
         .CodeMirror {
             height: 400px;
@@ -29,14 +29,14 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16 items-center">
                 <div class="flex items-center">
-                    <span class="text-2xl font-bold gradient-text">Optimus</span>
+                    <span class="text-2xl font-bold gradient-text">Cereale</span>
                 </div>
                 <div class="hidden md:block">
                     <div class="ml-10 flex items-baseline space-x-4">
                         <a href="#features" class="text-slate-600 hover:text-indigo-600 px-3 py-2 font-medium">Features</a>
                         <a href="#playground" class="text-slate-600 hover:text-indigo-600 px-3 py-2 font-medium">Playground</a>
                         <a href="#docs" class="text-slate-600 hover:text-indigo-600 px-3 py-2 font-medium">Docs</a>
-                        <a href="https://github.com/Avalon-Vanguard/optimus" class="bg-indigo-600 text-white px-4 py-2 rounded-md font-medium hover:bg-indigo-700 transition">GitHub</a>
+                        <a href="https://github.com/Avalon-Vanguard/cereale" class="bg-indigo-600 text-white px-4 py-2 rounded-md font-medium hover:bg-indigo-700 transition">GitHub</a>
                     </div>
                 </div>
             </div>
@@ -57,7 +57,7 @@
                 <div class="flex justify-center gap-4">
                     <a href="#playground" class="bg-indigo-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition">Try on the fly</a>
                     <code class="bg-slate-800 text-slate-100 px-6 py-3 rounded-lg text-lg font-mono flex items-center">
-                        npm install optimus
+                        npm install cereale
                     </code>
                 </div>
             </div>
@@ -66,7 +66,7 @@
         <!-- Features -->
         <section id="features" class="py-20 bg-white">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <h2 class="text-3xl font-bold text-center mb-16">Why Optimus?</h2>
+                <h2 class="text-3xl font-bold text-center mb-16">Why Cereale?</h2>
                 <div class="grid md:grid-cols-3 gap-8">
                     <div class="p-6 rounded-xl bg-slate-50 border border-slate-100">
                         <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4 text-indigo-600">
@@ -117,7 +117,7 @@
 
                 <div class="grid lg:grid-cols-2 gap-6">
                     <div>
-                        <div class="bg-slate-800 rounded-t-lg px-4 py-2 text-sm font-mono text-slate-400 border-b border-slate-700">TypeScript / Optimus</div>
+                        <div class="bg-slate-800 rounded-t-lg px-4 py-2 text-sm font-mono text-slate-400 border-b border-slate-700">TypeScript / Cereale</div>
                         <textarea id="editor"></textarea>
                     </div>
                     <div class="flex flex-col">
@@ -168,7 +168,7 @@
 
     <footer class="bg-slate-50 border-t border-slate-200 py-12">
         <div class="max-w-7xl mx-auto px-4 text-center text-slate-500">
-            <p>© 2026 Optimus Library. Licensed under MIT.</p>
+            <p>© 2026 Cereale Library. Licensed under MIT.</p>
         </div>
     </footer>
 
@@ -255,7 +255,7 @@ demo();`;
                     Positive, Negative,
                     JsonSerialize, JsonDeserialize, JsonPolymorphic, JsonType, JsonMapper, 
                     JsonValidationError 
-                } = Optimus;
+                } = Cereale;
 
                 const run = new Function(
                     'console', 

@@ -1,22 +1,35 @@
 {
-  "name": "optimus",
-  "version": "1.0.0",
+  "name": "cereale",
+  "version": "0.0.1",
   "description": "Spring-like decorators for JSON mapping and validation in TypeScript",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "sideEffects": false,
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
-    "demo": "ts-node src/example.ts",
+    "build": "rm -rf dist && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json",
+    "demo": "node --no-warnings=ExperimentalWarning --loader ts-node/esm src/example.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "prepublishOnly": "npm run build"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Avalon-Vanguard/optimus.git"
+    "url": "git+https://github.com/Avalon-Vanguard/cereale.git"
   },
   "keywords": [
     "json",
@@ -29,13 +42,18 @@
   "author": "Avalon Vanguard",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Avalon-Vanguard/optimus/issues"
+    "url": "https://github.com/Avalon-Vanguard/cereale/issues"
   },
-  "homepage": "https://github.com/Avalon-Vanguard/optimus#readme",
+  "homepage": "https://github.com/Avalon-Vanguard/cereale#readme",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^4.1.4",
+    "eslint": "^10.2.1",
+    "globals": "^17.5.0",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.2",
     "vitest": "^4.1.4"
   }
 }

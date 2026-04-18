@@ -9,9 +9,9 @@ export interface JsonSerializer<T = any, R = any> {
    * Serializes the value into a representation suitable for JSON output.
    * 
    * @param value - The value to be serialized.
-   * @returns The serialized value.
+   * @returns The serialized value or a promise resolving to it.
    */
-  serialize(value: T): R;
+  serialize(value: T): R | Promise<R>;
 }
 
 /**
@@ -25,9 +25,9 @@ export interface JsonDeserializer<T = any, R = any> {
    * Deserializes the value from a JSON-like representation back to its original type.
    * 
    * @param value - The value to be deserialized.
-   * @returns The deserialized value.
+   * @returns The deserialized value or a promise resolving to it.
    */
-  deserialize(value: T): R;
+  deserialize(value: T): R | Promise<R>;
 }
 
 /**

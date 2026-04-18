@@ -1,6 +1,6 @@
-# Optimus
+# Cereale
 
-Optimus is a lightweight TypeScript library that provides Spring-like decorators for JSON mapping and validation. Built with ZERO external dependencies, it simplifies the process of converting between plain JSON and class instances with full validation support.
+Cereale is a lightweight TypeScript library that provides Spring-like decorators for JSON mapping and validation. Built with ZERO external dependencies, it simplifies the process of converting between plain JSON and class instances with full validation support.
 
 ## Features
 
@@ -14,7 +14,7 @@ Optimus is a lightweight TypeScript library that provides Spring-like decorators
 ## Installation
 
 ```bash
-npm install optimus
+npm install cereale
 ```
 
 Make sure to enable `experimentalDecorators` and `emitDecoratorMetadata` in your `tsconfig.json`:
@@ -24,7 +24,7 @@ Make sure to enable `experimentalDecorators` and `emitDecoratorMetadata` in your
   "compilerOptions": {
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "target": "ES6"
+    "target": "ES2025"
   }
 }
 ```
@@ -47,7 +47,7 @@ import {
   JsonPolymorphic, 
   JsonSerializer, 
   JsonDeserializer 
-} from 'optimus';
+} from 'cereale';
 
 // Custom Date Serializer
 class DateSerializer implements JsonSerializer<Date, string> {
@@ -96,22 +96,22 @@ class Library {
 
 ### 2. Map JSON with Validation
 
-Use `JsonMapper` to handle the conversion process.
+Use standalone utility functions to handle the conversion process directly.
 
 ```typescript
-import { JsonMapper, JsonValidationError } from 'optimus';
+import { fromJson, toJson, JsonValidationError } from 'cereale';
 
 async function main() {
   const json = '{"name": "Central Library", "items": [{"type": "book", "title": "The Great Gatsby", "author": "F. Scott Fitzgerald", "publishedAt": "1925-04-10"}]}';
 
   try {
     // Deserialize JSON to Class Instance
-    const library = await JsonMapper.fromJson(Library, json);
+    const library = await fromJson(Library, json);
     console.log(library.name); // "Central Library"
     console.log(library.items[0] instanceof Book); // true
 
     // Serialize Class Instance back to JSON
-    const outputJson = await JsonMapper.toJson(library);
+    const outputJson = await toJson(library);
     console.log(outputJson);
   } catch (error) {
     if (error instanceof JsonValidationError) {
@@ -119,6 +119,20 @@ async function main() {
     }
   }
 }
+```
+
+### 3. Modern Web Frameworks (Request Integration)
+
+Cereale is compatible with Fetch-based frameworks like Hono, Next.js, and Remix. Use the `fromRequest` async helper.
+
+```typescript
+import { fromRequest, toPlain } from 'cereale';
+
+// Hono Example
+app.post('/books', async (c) => {
+  const book = await fromRequest(Book, c.req.raw);
+  return c.json(await toPlain(book));
+});
 ```
 
 ## API Reference
@@ -166,10 +180,48 @@ Most validation decorators accept an optional `ValidationOptions` object:
 
 ### Utilities
 
-- `JsonMapper.toJson(obj: any, options?)`: Validates and serializes an instance to a JSON string.
-- `JsonMapper.toPlain(obj: any, options?)`: Validates and transforms an instance to a plain object.
-- `JsonMapper.fromJson(clazz: ClassConstructor, json: string, options?)`: Parses JSON and transforms it to a validated class instance.
-- `JsonMapper.toInstance(clazz: ClassConstructor, plain: any, options?)`: Transforms a plain object to a validated class instance.
+- `toJson(obj: any)`: Validates and serializes an instance to a JSON string (Returns `Promise<string>`).
+- `toPlain(obj: any)`: Validates and transforms an instance to a plain object (Returns `Promise<any>`).
+- `fromJson(clazz: ClassConstructor, json: string)`: Parses JSON and transforms it to a validated class instance (Returns `Promise<T>`).
+- `toInstance(clazz: ClassConstructor, plain: any)`: Transforms a plain object to a validated class instance (Returns `Promise<T>`).
+- `fromRequest(clazz: ClassConstructor, request: Request)`: Extracts JSON from a Fetch `Request` and transforms it to a validated instance (Returns `Promise<T>`).
+- `validate(obj: any)`: Performs full validation on an object/instance (Returns `Promise<ValidationError[]>`).
+
+## Framework Integrations
+
+Cereale is designed to be compatible with all trending web frameworks.
+
+### Hono / Next.js / Cloudflare Workers
+Use `fromRequest` for seamless integration with the Fetch `Request` API.
+
+### NestJS
+You can use Cereale inside your controllers for explicit mapping and validation without needing `reflect-metadata`.
+
+```typescript
+import { toInstance } from 'cereale';
+
+@Post()
+async create(@Body() body: any) {
+  const user = await toInstance(User, body);
+  return this.userService.create(user);
+}
+```
+
+### Express / Fastify
+Easily integrate with traditional Node.js frameworks.
+
+```typescript
+import { toInstance, toPlain } from 'cereale';
+
+app.post('/user', async (req, res) => {
+  try {
+    const user = await toInstance(User, req.body);
+    res.json(await toPlain(user));
+  } catch (err) {
+    res.status(400).json(err);
+  }
+});
+```
 
 ## Contributing
 
@@ -177,4 +229,4 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute t
 
 ## License
 
-Optimus is licensed under the [ISC License](LICENSE).
+Cereale is licensed under the [MIT License](LICENSE).
