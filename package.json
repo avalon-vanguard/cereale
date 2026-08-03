@@ -1,6 +1,6 @@
 {
   "name": "cereale",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Spring-like decorators for JSON mapping and validation in TypeScript",
   "type": "module",
   "main": "./dist/cjs/index.js",
