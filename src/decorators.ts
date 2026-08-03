@@ -10,7 +10,20 @@ export const METADATA_KEYS = {
   POLYMORPHIC: 'cereale:polymorphic',
   IS_OPTIONAL: 'cereale:optional',
   NESTED: 'cereale:nested',
+  NAME: 'cereale:name',
+  ALIASES: 'cereale:aliases',
+  ACCESS: 'cereale:access',
 };
+
+/**
+ * Which directions a property participates in.
+ *
+ * - `readwrite` (default): mapped both ways.
+ * - `readonly`: written to JSON, never populated from incoming JSON (server-assigned ids).
+ * - `writeonly`: populated from incoming JSON, never written back out (passwords).
+ * - `none`: ignored entirely.
+ */
+export type PropertyAccess = 'readwrite' | 'readonly' | 'writeonly' | 'none';
 
 export interface ValidationArguments {
   value: any;
@@ -72,6 +85,86 @@ function addValidation(target: any, propertyKey: string, constraint: ValidationC
 }
 
 // --- Mapping Decorators ---
+
+/**
+ * @JsonProperty(name: string)
+ * Maps this property to a different name in JSON, in both directions.
+ *
+ * ```ts
+ * class User {
+ *   @JsonProperty('first_name')
+ *   firstName: string;   // <-> {"first_name": "Ada"}
+ * }
+ * ```
+ *
+ * An explicit name always wins over the active naming strategy.
+ */
+export function JsonProperty(name: string) {
+  return (target: any, propertyKey: string) => {
+    registerProperty(target, propertyKey);
+    metadataStorage.defineMetadata(METADATA_KEYS.NAME, name, target, propertyKey);
+  };
+}
+
+/**
+ * @JsonAlias(...names: string[])
+ * Additional names accepted for this property when reading JSON.
+ *
+ * Aliases are input-only — output always uses the canonical name — which makes them the
+ * tool for accepting a renamed field from older clients without emitting it.
+ *
+ * ```ts
+ * class User {
+ *   @JsonProperty('surname')
+ *   @JsonAlias('last_name', 'lastName')
+ *   surname: string;
+ * }
+ * ```
+ */
+export function JsonAlias(...names: string[]) {
+  return (target: any, propertyKey: string) => {
+    registerProperty(target, propertyKey);
+    const existing: string[] = metadataStorage.getOwnMetadata(METADATA_KEYS.ALIASES, target, propertyKey) || [];
+    metadataStorage.defineMetadata(METADATA_KEYS.ALIASES, [...existing, ...names], target, propertyKey);
+  };
+}
+
+/**
+ * @JsonIgnore()
+ * Excludes this property from mapping in both directions.
+ */
+export function JsonIgnore() {
+  return (target: any, propertyKey: string) => {
+    registerProperty(target, propertyKey);
+    metadataStorage.defineMetadata(METADATA_KEYS.ACCESS, 'none', target, propertyKey);
+  };
+}
+
+/**
+ * @JsonReadOnly()
+ * Serialized to JSON, but never populated from incoming JSON.
+ *
+ * For server-owned fields — ids, timestamps — that a client must not be able to set.
+ */
+export function JsonReadOnly() {
+  return (target: any, propertyKey: string) => {
+    registerProperty(target, propertyKey);
+    metadataStorage.defineMetadata(METADATA_KEYS.ACCESS, 'readonly', target, propertyKey);
+  };
+}
+
+/**
+ * @JsonWriteOnly()
+ * Populated from incoming JSON, but never serialized back out.
+ *
+ * For secrets — passwords, tokens — that you accept but must never echo.
+ */
+export function JsonWriteOnly() {
+  return (target: any, propertyKey: string) => {
+    registerProperty(target, propertyKey);
+    metadataStorage.defineMetadata(METADATA_KEYS.ACCESS, 'writeonly', target, propertyKey);
+  };
+}
 
 /**
  * @JsonSerialize(serializer: ClassConstructor<JsonSerializer>)

@@ -1,6 +1,8 @@
 import { ClassConstructor } from './interfaces.js';
-import { METADATA_KEYS, ValidationConstraint, ValidationArguments } from './decorators.js';
+import { METADATA_KEYS, PropertyAccess, ValidationConstraint, ValidationArguments } from './decorators.js';
 import { metadataStorage } from './metadata-storage.js';
+import { NamingStrategyFn, resolveNamingStrategy } from './naming.js';
+import { TransformOptions, UnknownKeyPolicy, resolveOptions } from './config.js';
 
 export interface ValidationError {
   property: string;
@@ -41,6 +43,16 @@ const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 // --- Internal Engine ---
 
+interface SerializeContext {
+  naming: NamingStrategyFn;
+}
+
+interface DeserializeContext {
+  naming: NamingStrategyFn;
+  namingKey: unknown;
+  unknownKeys: UnknownKeyPolicy;
+}
+
 /**
  * Resolves the metadata lookup target for a value.
  *
@@ -52,7 +64,84 @@ function prototypeOf(obj: any): any {
   return Object.getPrototypeOf(obj) ?? undefined;
 }
 
-async function serialize(obj: any, ancestors: Set<any>): Promise<any> {
+function accessOf(target: any, key: string): PropertyAccess {
+  return (target ? metadataStorage.getMetadata(METADATA_KEYS.ACCESS, target, key) : undefined) ?? 'readwrite';
+}
+
+/** The name this property takes in JSON: an explicit @JsonProperty, else the naming strategy. */
+function outboundName(target: any, key: string, naming: NamingStrategyFn): string {
+  const explicit = target ? metadataStorage.getMetadata(METADATA_KEYS.NAME, target, key) : undefined;
+  return explicit ?? naming(key);
+}
+
+interface InboundNames {
+  /** JSON name -> property key, for properties this payload is allowed to set. */
+  accept: Map<string, string>;
+  /**
+   * JSON names that belong to a declared property the payload may NOT set
+   * (`@JsonIgnore` / `@JsonReadOnly`). They are dropped rather than treated as unknown
+   * keys — otherwise the default `unknownKeys: 'allow'` policy would copy them straight
+   * back onto the instance and undo the protection.
+   */
+  blocked: Set<string>;
+}
+
+// Name maps are derived purely from decorator metadata, which is fixed once a class is
+// declared, so they are cached per (prototype, naming strategy).
+const inboundCache = new WeakMap<object, Map<unknown, InboundNames>>();
+
+/**
+ * Builds the JSON-name -> property-key lookup used when reading a payload.
+ *
+ * Only names the class actually declares are accepted: the `@JsonProperty` name (or the
+ * naming strategy's rendering of the property name) plus any `@JsonAlias`. Renaming a
+ * property therefore stops the old name from being silently accepted — add `@JsonAlias` to
+ * keep it working for older clients.
+ */
+function inboundNameMap(target: any, ctx: DeserializeContext): InboundNames {
+  let byStrategy = inboundCache.get(target);
+  if (!byStrategy) {
+    byStrategy = new Map();
+    inboundCache.set(target, byStrategy);
+  }
+  const cached = byStrategy.get(ctx.namingKey);
+  if (cached) return cached;
+
+  const accept = new Map<string, string>();
+  const blocked = new Set<string>();
+
+  const claim = (external: string, key: string) => {
+    const owner = accept.get(external);
+    if (owner && owner !== key) {
+      throw new JsonMappingError(
+        `Properties "${owner}" and "${key}" both map to the JSON name ${JSON.stringify(external)}. ` +
+        `Give one of them a distinct @JsonProperty name.`
+      );
+    }
+    accept.set(external, key);
+  };
+
+  for (const key of metadataStorage.getProperties(target)) {
+    const names = [
+      outboundName(target, key, ctx.naming),
+      ...(metadataStorage.getMetadata(METADATA_KEYS.ALIASES, target, key) || []),
+    ];
+
+    const access = accessOf(target, key);
+    if (access === 'none' || access === 'readonly') {
+      for (const name of names) blocked.add(name);
+      continue;
+    }
+
+    for (const name of names) claim(name, key);
+  }
+
+  const result = { accept, blocked };
+  byStrategy.set(ctx.namingKey, result);
+  return result;
+}
+
+async function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext): Promise<any> {
   if (obj === null || obj === undefined || typeof obj !== 'object') {
     return obj;
   }
@@ -73,7 +162,7 @@ async function serialize(obj: any, ancestors: Set<any>): Promise<any> {
     if (Array.isArray(obj)) {
       const out: any[] = [];
       for (const item of obj) {
-        out.push(await serialize(item, ancestors));
+        out.push(await serialize(item, ancestors, ctx));
       }
       return out;
     }
@@ -82,16 +171,21 @@ async function serialize(obj: any, ancestors: Set<any>): Promise<any> {
 
     const result: any = {};
     for (const key of Object.keys(obj)) {
+      const access = accessOf(target, key);
+      // `writeonly` is accepted on input but must never be echoed back out.
+      if (access === 'none' || access === 'writeonly') continue;
+
       const value = obj[key];
+      const name = outboundName(target, key, ctx.naming);
 
       // Custom serializers only see real values. Handing a serializer `undefined` for a
       // property that was simply never set turns an optional field into a crash.
       const serializerCls = target ? metadataStorage.getMetadata(METADATA_KEYS.SERIALIZER, target, key) : undefined;
       if (serializerCls && value !== null && value !== undefined) {
         const serializer = new serializerCls();
-        result[key] = await serializer.serialize(value);
+        result[name] = await serializer.serialize(value);
       } else {
-        result[key] = await serialize(value, ancestors);
+        result[name] = await serialize(value, ancestors, ctx);
       }
     }
 
@@ -103,11 +197,11 @@ async function serialize(obj: any, ancestors: Set<any>): Promise<any> {
   }
 }
 
-async function deserialize<T>(clazz: ClassConstructor<T>, plain: any): Promise<T> {
+async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: DeserializeContext): Promise<T> {
   if (plain === null || plain === undefined) return plain;
 
   if (Array.isArray(plain)) {
-    const results = await Promise.all(plain.map(item => deserialize(clazz, item)));
+    const results = await Promise.all(plain.map(item => deserialize(clazz, item, ctx)));
     return results as any;
   }
 
@@ -115,12 +209,31 @@ async function deserialize<T>(clazz: ClassConstructor<T>, plain: any): Promise<T
 
   const instance = new clazz();
   const target = clazz.prototype;
+  const inbound = inboundNameMap(target, ctx);
 
-  // Copy all properties from plain to instance
-  for (const key of Object.keys(plain)) {
-    if (FORBIDDEN_KEYS.has(key)) continue;
+  for (const incoming of Object.keys(plain)) {
+    if (FORBIDDEN_KEYS.has(incoming)) continue;
 
-    const value = plain[key];
+    // A declared property the payload is not allowed to set. Ignoring it is deliberate:
+    // rejecting the whole request because a client echoed back a server-owned id is worse
+    // than quietly refusing to honour it.
+    if (inbound.blocked.has(incoming)) continue;
+
+    const key = inbound.accept.get(incoming);
+    if (key === undefined) {
+      // Not a declared property under the active naming strategy.
+      if (ctx.unknownKeys === 'strip') continue;
+      if (ctx.unknownKeys === 'error') {
+        throw new JsonMappingError(
+          `Unknown property ${JSON.stringify(incoming)} for ${clazz.name}. ` +
+          `Allowed: ${[...inbound.accept.keys()].map(k => JSON.stringify(k)).join(', ') || '(none declared)'}.`
+        );
+      }
+      instance[incoming as keyof T] = plain[incoming];
+      continue;
+    }
+
+    const value = plain[incoming];
 
     // Custom Deserializer
     const deserializerCls = metadataStorage.getMetadata(METADATA_KEYS.DESERIALIZER, target, key);
@@ -138,8 +251,8 @@ async function deserialize<T>(clazz: ClassConstructor<T>, plain: any): Promise<T
       const resolve = async (item: any): Promise<any> => {
         if (item === null || item === undefined || typeof item !== 'object') return item;
         const subTypeInfo = subTypes.find((s: any) => item[discriminator] === s.name);
-        if (subTypeInfo) return deserialize(subTypeInfo.value, item);
-        if (fallback) return deserialize(fallback, item);
+        if (subTypeInfo) return deserialize(subTypeInfo.value, item, ctx);
+        if (fallback) return deserialize(fallback, item, ctx);
         if (onUnknown === 'error') {
           throw new JsonMappingError(
             `Unknown discriminator value ${JSON.stringify(item[discriminator])} for property ` +
@@ -160,7 +273,7 @@ async function deserialize<T>(clazz: ClassConstructor<T>, plain: any): Promise<T
     const typeFn = metadataStorage.getMetadata(METADATA_KEYS.TYPE, target, key);
     if (typeFn && value !== null && value !== undefined) {
       const type = typeFn();
-      instance[key as keyof T] = await deserialize(type, value);
+      instance[key as keyof T] = await deserialize(type, value, ctx);
       continue;
     }
 
@@ -321,6 +434,20 @@ async function validateInternal(obj: any, ancestors: Set<any>): Promise<Validati
   }
 }
 
+function serializeContext(options?: TransformOptions): SerializeContext {
+  const resolved = resolveOptions(options);
+  return { naming: resolveNamingStrategy(resolved.namingStrategy) };
+}
+
+function deserializeContext(options?: TransformOptions): DeserializeContext {
+  const resolved = resolveOptions(options);
+  return {
+    naming: resolveNamingStrategy(resolved.namingStrategy),
+    namingKey: resolved.namingStrategy,
+    unknownKeys: resolved.unknownKeys,
+  };
+}
+
 // --- Public API Functions ---
 
 /**
@@ -333,94 +460,147 @@ export async function validate(obj: any): Promise<ValidationError[]> {
 }
 
 /**
- * Converts a class instance to a plain object with validation.
- * @param obj The class instance to transform
- * @returns Plain object
+ * Validates an object and throws {@link JsonValidationError} if it fails.
+ *
+ * The counterpart to {@link validate} for callers who want an exception rather than an
+ * array they have to remember to check.
  */
-export async function toPlain<T>(obj: T): Promise<any> {
-  if (obj === null || obj === undefined) return obj;
-
+export async function validateOrReject(obj: any): Promise<void> {
   const errors = await validate(obj);
   if (errors.length > 0) {
-    throw new JsonValidationError('Validation failed during serialization', errors);
+    throw new JsonValidationError('Validation failed', errors);
   }
-
-  return serialize(obj, new Set());
 }
 
 /**
- * Converts a class instance to a JSON string with validation.
+ * Converts a class instance to a plain object.
+ *
+ * Validates first and throws {@link JsonValidationError} on failure, unless
+ * `{ validate: false }` is passed.
+ *
  * @param obj The class instance to transform
+ * @param options Per-call transform options
+ * @returns Plain object
+ */
+export async function toPlain<T>(obj: T, options?: TransformOptions): Promise<any> {
+  if (obj === null || obj === undefined) return obj;
+
+  if (resolveOptions(options).validate) {
+    const errors = await validate(obj);
+    if (errors.length > 0) {
+      throw new JsonValidationError('Validation failed during serialization', errors);
+    }
+  }
+
+  return serialize(obj, new Set(), serializeContext(options));
+}
+
+/**
+ * Converts a class instance to a JSON string.
+ * @param obj The class instance to transform
+ * @param options Per-call transform options
  * @returns JSON string
  */
-export async function toJson<T>(obj: T): Promise<string> {
-  const plain = await toPlain(obj);
+export async function toJson<T>(obj: T, options?: TransformOptions): Promise<string> {
+  const plain = await toPlain(obj, options);
   return JSON.stringify(plain);
 }
 
 /**
- * Converts a plain object to a class instance with validation.
+ * Converts a plain object to a class instance.
+ *
+ * Validates the result and throws {@link JsonValidationError} on failure, unless
+ * `{ validate: false }` is passed.
+ *
  * @param clazz The class constructor
  * @param plain The plain object to transform
- * @returns Validated class instance
+ * @param options Per-call transform options
+ * @returns Class instance
  */
-export async function toInstance<T>(clazz: ClassConstructor<T>, plain: any): Promise<T> {
-  const instance = await deserialize(clazz, plain);
+export async function toInstance<T>(clazz: ClassConstructor<T>, plain: any, options?: TransformOptions): Promise<T> {
+  const instance = await deserialize(clazz, plain, deserializeContext(options));
 
-  const errors = await validate(instance);
-  if (errors.length > 0) {
-    throw new JsonValidationError('Validation failed during deserialization', errors);
+  if (resolveOptions(options).validate) {
+    const errors = await validate(instance);
+    if (errors.length > 0) {
+      throw new JsonValidationError('Validation failed during deserialization', errors);
+    }
   }
 
   return instance;
 }
 
 /**
- * Converts an array of plain objects to an array of class instances with validation.
+ * Converts an array of plain objects to an array of class instances.
  *
  * `toInstance` also accepts arrays at runtime, but its return type says `T`. Use this when
  * the payload is a collection so the static type matches what you actually get back.
  *
  * @param clazz The class constructor
  * @param plain The array of plain objects to transform
- * @returns Validated array of class instances
+ * @param options Per-call transform options
+ * @returns Array of class instances
  */
-export async function toInstanceArray<T>(clazz: ClassConstructor<T>, plain: any[]): Promise<T[]> {
+export async function toInstanceArray<T>(
+  clazz: ClassConstructor<T>,
+  plain: any[],
+  options?: TransformOptions
+): Promise<T[]> {
   if (!Array.isArray(plain)) {
     throw new JsonMappingError(`Expected an array to map to ${clazz.name}[], received ${typeof plain}.`);
   }
-  return (await toInstance(clazz, plain)) as unknown as T[];
+  return (await toInstance(clazz, plain, options)) as unknown as T[];
 }
 
 /**
- * Parses a JSON string to a class instance with validation.
+ * Parses a JSON string to a class instance.
  * @param clazz The class constructor
  * @param json JSON string
- * @returns Validated class instance
+ * @param options Per-call transform options
+ * @returns Class instance
  */
-export async function fromJson<T>(clazz: ClassConstructor<T>, json: string): Promise<T> {
-  const plain = JSON.parse(json);
-  return toInstance(clazz, plain);
+export async function fromJson<T>(clazz: ClassConstructor<T>, json: string, options?: TransformOptions): Promise<T> {
+  return toInstance(clazz, parseJson(json), options);
 }
 
 /**
- * Parses a JSON string containing an array into validated class instances.
+ * Parses a JSON string containing an array into class instances.
  * @param clazz The class constructor
  * @param json JSON string holding an array
- * @returns Validated array of class instances
+ * @param options Per-call transform options
+ * @returns Array of class instances
  */
-export async function fromJsonArray<T>(clazz: ClassConstructor<T>, json: string): Promise<T[]> {
-  return toInstanceArray(clazz, JSON.parse(json));
+export async function fromJsonArray<T>(
+  clazz: ClassConstructor<T>,
+  json: string,
+  options?: TransformOptions
+): Promise<T[]> {
+  return toInstanceArray(clazz, parseJson(json), options);
+}
+
+function parseJson(json: string): any {
+  try {
+    return JSON.parse(json);
+  } catch (error) {
+    throw new JsonMappingError(
+      `Input is not valid JSON: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 /**
  * Helper for Fetch-based frameworks (Next.js, Hono, etc.)
- * Extracts JSON from a Request and transforms it to a validated instance.
+ * Extracts JSON from a Request and transforms it to a class instance.
  * @param clazz The class constructor
  * @param request Web Request object
- * @returns Validated class instance
+ * @param options Per-call transform options
+ * @returns Class instance
  */
-export async function fromRequest<T>(clazz: ClassConstructor<T>, request: Request): Promise<T> {
+export async function fromRequest<T>(
+  clazz: ClassConstructor<T>,
+  request: Request,
+  options?: TransformOptions
+): Promise<T> {
   let plain: any;
   try {
     plain = await request.json();
@@ -429,7 +609,7 @@ export async function fromRequest<T>(clazz: ClassConstructor<T>, request: Reques
       `Request body is not valid JSON: ${error instanceof Error ? error.message : String(error)}`
     );
   }
-  return toInstance(clazz, plain);
+  return toInstance(clazz, plain, options);
 }
 
 /**
@@ -444,4 +624,5 @@ export class JsonMapper {
   static fromJsonArray = fromJsonArray;
   static fromRequest = fromRequest;
   static validate = validate;
+  static validateOrReject = validateOrReject;
 }
