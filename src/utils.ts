@@ -365,6 +365,12 @@ async function validateInternal(obj: any, ancestors: Set<any>): Promise<Validati
         constraints: {}
       };
 
+      // Handle @ValidateIf — a false condition takes the property out of validation entirely.
+      const condition = metadataStorage.getMetadata(METADATA_KEYS.CONDITION, target, key);
+      if (condition && !condition(obj)) {
+        continue;
+      }
+
       // Handle IsOptional
       const isOptional = metadataStorage.getMetadata(METADATA_KEYS.IS_OPTIONAL, target, key);
       const isNullOrUndefined = value === null || value === undefined;
