@@ -202,8 +202,8 @@ describe('JsonMapper', () => {
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(1);
-      expect(errors[0].property).toBe('username');
-      expect(errors[0].constraints).toHaveProperty('minLength');
+      expect(errors[0]!.property).toBe('username');
+      expect(errors[0]!.constraints).toHaveProperty('minLength');
     });
 
     it('should fail on invalid email', async () => {
@@ -215,8 +215,8 @@ describe('JsonMapper', () => {
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(1);
-      expect(errors[0].property).toBe('email');
-      expect(errors[0].constraints).toHaveProperty('isEmail');
+      expect(errors[0]!.property).toBe('email');
+      expect(errors[0]!.constraints).toHaveProperty('isEmail');
     });
 
     it('should fail on invalid role (IsIn)', async () => {
@@ -228,8 +228,8 @@ describe('JsonMapper', () => {
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(1);
-      expect(errors[0].property).toBe('roles');
-      expect(errors[0].constraints).toHaveProperty('isIn');
+      expect(errors[0]!.property).toBe('roles');
+      expect(errors[0]!.constraints).toHaveProperty('isIn');
     });
 
     it('should skip validation for null optional field', async () => {
@@ -238,7 +238,7 @@ describe('JsonMapper', () => {
       user.email = 'john@example.com';
       user.active = true;
       user.roles = ['user'];
-      user.age = undefined; // optional
+      delete user.age; // optional
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(0);
@@ -254,8 +254,8 @@ describe('JsonMapper', () => {
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(1);
-      expect(errors[0].property).toBe('age');
-      expect(errors[0].constraints).toHaveProperty('min');
+      expect(errors[0]!.property).toBe('age');
+      expect(errors[0]!.constraints).toHaveProperty('min');
     });
   });
 });

@@ -35,6 +35,8 @@
 
     "experimentalDecorators": true
   },
+  // NOTE: test files are deliberately included here so that `npm run type-check`
+  // covers them. The two build configs exclude them (and the demo) from `dist`.
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+  "exclude": ["node_modules", "dist"]
 }

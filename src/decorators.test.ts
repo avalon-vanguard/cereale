@@ -238,7 +238,7 @@ describe('Additional Decorators', () => {
       t.val = 'wrong';
       const errors = await JsonMapper.validate(t);
       expect(errors).toHaveLength(1);
-      expect(errors[0].constraints['CustomValidator']).toBe('val must be correct');
+      expect(errors[0]!.constraints['CustomValidator']).toBe('val must be correct');
     });
   });
 
@@ -304,7 +304,7 @@ describe('Additional Decorators', () => {
       t.val = 5;
       const errors = await JsonMapper.validate(t);
       expect(errors).toHaveLength(1);
-      expect(errors[0].constraints['custom']).toBe('must be ten');
+      expect(errors[0]!.constraints['custom']).toBe('must be ten');
     });
 
     it('should handle options as second argument', async () => {
@@ -318,7 +318,7 @@ describe('Additional Decorators', () => {
       t.val = 2;
       const errors = await JsonMapper.validate(t);
       expect(errors).toHaveLength(1);
-      expect(errors[0].constraints['custom']).toBe('must be one');
+      expect(errors[0]!.constraints['custom']).toBe('must be one');
     });
   });
 
@@ -339,10 +339,10 @@ describe('Additional Decorators', () => {
         name: string;
       }
       const json = '[{"name": "a"}, {"name": "b"}]';
-      const items = await JsonMapper.fromJson(Item, json);
+      const items = (await JsonMapper.fromJson(Item, json)) as unknown as Item[];
       expect(Array.isArray(items)).toBe(true);
       expect(items[0]).toBeInstanceOf(Item);
-      expect(items[0].name).toBe('a');
+      expect(items[0]!.name).toBe('a');
     });
 
     it('should handle single polymorphic object', async () => {
@@ -350,7 +350,7 @@ describe('Additional Decorators', () => {
         @IsString() type: string;
       }
       class Dog extends Animal {
-        type = 'dog';
+        override type = 'dog';
         @IsString() breed: string;
       }
       class Test {
@@ -376,7 +376,7 @@ describe('Additional Decorators', () => {
       t.tags = ['a', 1 as any];
       const errors = await JsonMapper.validate(t);
       expect(errors).toHaveLength(1);
-      expect(errors[0].constraints['isString']).toContain('each element');
+      expect(errors[0]!.constraints['isString']).toContain('each element');
     });
   });
 });

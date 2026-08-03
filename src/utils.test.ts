@@ -30,7 +30,7 @@ describe('Standalone Utility Functions', () => {
     user.age = '30' as any;
     const errors2 = await validate(user);
     expect(errors2).toHaveLength(1);
-    expect(errors2[0].property).toBe('age');
+    expect(errors2[0]!.property).toBe('age');
   });
 
   it('should transform to plain object directly', async () => {
