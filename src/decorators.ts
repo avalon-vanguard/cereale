@@ -9,6 +9,7 @@ export const METADATA_KEYS = {
   DESERIALIZER: 'cereale:deserializer',
   POLYMORPHIC: 'cereale:polymorphic',
   IS_OPTIONAL: 'cereale:optional',
+  NESTED: 'cereale:nested',
 };
 
 export interface ValidationArguments {
@@ -29,6 +30,12 @@ export type ValidationConstraint = {
   message: string | ((args: ValidationArguments) => string);
   constraints?: any[];
   each?: boolean;
+  /**
+   * True when the message came from the user via `ValidationOptions.message`.
+   * The engine only decorates default messages with the "each element in ..." prefix;
+   * a message the user wrote is reported exactly as written.
+   */
+  hasCustomMessage?: boolean;
 };
 
 export interface ValidatorConstraintInterface {
@@ -55,9 +62,10 @@ function addValidation(target: any, propertyKey: string, constraint: ValidationC
     }
     if (options.message) {
       constraint.message = options.message;
+      constraint.hasCustomMessage = true;
     }
   }
-  
+
   const constraints: ValidationConstraint[] = metadataStorage.getOwnMetadata(METADATA_KEYS.VALIDATION, target, propertyKey) || [];
   constraints.push(constraint);
   metadataStorage.defineMetadata(METADATA_KEYS.VALIDATION, constraints, target, propertyKey);
@@ -98,14 +106,34 @@ export function JsonType(typeFunction: () => ClassConstructor<any>) {
   };
 }
 
+export interface PolymorphicOptions {
+  /**
+   * What to do when the discriminator value matches no registered subtype.
+   * - `keep` (default): pass the raw value through untouched.
+   * - `error`: throw a {@link JsonMappingError} naming the unknown discriminator value.
+   */
+  onUnknown?: 'keep' | 'error';
+  /** Subtype to use when the discriminator matches nothing. Takes precedence over `onUnknown`. */
+  fallback?: ClassConstructor<any>;
+}
+
 /**
- * @JsonPolymorphic(discriminator: string, subTypes: { value: ClassConstructor<any>, name: string }[])
+ * @JsonPolymorphic(discriminator: string, subTypes: { value: ClassConstructor<any>, name: string }[], options?: PolymorphicOptions)
  * Defines polymorphic behavior for a property.
  */
-export function JsonPolymorphic(discriminator: string, subTypes: { value: ClassConstructor<any>, name: string }[]) {
+export function JsonPolymorphic(
+  discriminator: string,
+  subTypes: { value: ClassConstructor<any>, name: string }[],
+  options?: PolymorphicOptions
+) {
   return (target: any, propertyKey: string) => {
     registerProperty(target, propertyKey);
-    metadataStorage.defineMetadata(METADATA_KEYS.POLYMORPHIC, { discriminator, subTypes }, target, propertyKey);
+    metadataStorage.defineMetadata(
+      METADATA_KEYS.POLYMORPHIC,
+      { discriminator, subTypes, onUnknown: options?.onUnknown ?? 'keep', fallback: options?.fallback },
+      target,
+      propertyKey
+    );
   };
 }
 
@@ -333,10 +361,16 @@ export function IsUrl(options?: ValidationOptions) {
  * @Matches(pattern: RegExp)
  */
 export function Matches(pattern: RegExp, options?: ValidationOptions) {
+  // A `g` or `y` flag makes RegExp.prototype.test stateful: it advances lastIndex on a
+  // match and resumes from there on the next call, so validating the same value twice
+  // yields different answers. Validation must be a pure predicate, so drop those flags.
+  const stateless = pattern.flags.includes('g') || pattern.flags.includes('y')
+    ? new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, ''))
+    : pattern;
   return (target: any, propertyKey: string) => {
     addValidation(target, propertyKey, {
       name: 'matches',
-      validate: (v) => typeof v === 'string' && pattern.test(v),
+      validate: (v) => typeof v === 'string' && stateless.test(v),
       message: `${propertyKey} must match ${pattern} regular expression`,
       constraints: [pattern]
     }, options);
@@ -439,13 +473,26 @@ export function IsDate(options?: ValidationOptions) {
 }
 
 /**
- * @ValidateNested()
+ * @ValidateNested(options?: ValidationOptions)
+ * Recursively validates the value of this property.
+ *
+ * `{ each: true }` documents that the property holds a collection; nested validation
+ * already recurses into arrays, but passing `each` additionally asserts that the value
+ * really is an array.
  */
-export function ValidateNested() {
+export function ValidateNested(options?: ValidationOptions) {
   return (target: any, propertyKey: string) => {
     registerProperty(target, propertyKey);
     // This is a marker for recursive validation
-    metadataStorage.defineMetadata('cereale:nested', true, target, propertyKey);
+    metadataStorage.defineMetadata(METADATA_KEYS.NESTED, true, target, propertyKey);
+
+    if (options?.each) {
+      addValidation(target, propertyKey, {
+        name: 'nestedEach',
+        validate: (v) => Array.isArray(v),
+        message: `${propertyKey} must be an array`
+      });
+    }
   };
 }
 
