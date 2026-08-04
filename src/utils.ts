@@ -45,12 +45,15 @@ const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 interface SerializeContext {
   naming: NamingStrategyFn;
+  namingKey: unknown;
+  maxDepth: number;
 }
 
 interface DeserializeContext {
   naming: NamingStrategyFn;
   namingKey: unknown;
   unknownKeys: UnknownKeyPolicy;
+  maxDepth: number;
 }
 
 /**
@@ -74,9 +77,69 @@ function outboundName(target: any, key: string, naming: NamingStrategyFn): strin
   return explicit ?? naming(key);
 }
 
+/** Per-property serialization facts, resolved once instead of per call. */
+interface OutboundProperty {
+  /** The name to write in the output. */
+  name: string;
+  /** True for @JsonIgnore / @JsonWriteOnly — omitted from output. */
+  skip: boolean;
+  /** The @JsonSerialize class, if any. */
+  serializer?: any;
+}
+
+const outboundCache = new WeakMap<object, { version: number; byStrategy: Map<unknown, Map<string, OutboundProperty>> }>();
+
+/**
+ * Resolves how one property is written out, memoized per (prototype, naming strategy).
+ *
+ * Serialization walks the runtime keys of each object, so undeclared properties turn up here
+ * too; they memoize just as well, since the naming strategy is deterministic.
+ */
+function outboundFor(target: any, key: string, ctx: SerializeContext): OutboundProperty {
+  if (!target) {
+    // Null-prototype object: nothing is declared, so there is nothing to cache against.
+    return { name: ctx.naming(key), skip: false };
+  }
+
+  let entry = outboundCache.get(target);
+  if (!entry || entry.version !== metadataStorage.version) {
+    entry = { version: metadataStorage.version, byStrategy: new Map() };
+    outboundCache.set(target, entry);
+  }
+
+  let byKey = entry.byStrategy.get(ctx.namingKey);
+  if (!byKey) {
+    byKey = new Map();
+    entry.byStrategy.set(ctx.namingKey, byKey);
+  }
+
+  let resolved = byKey.get(key);
+  if (!resolved) {
+    const access = accessOf(target, key);
+    const serializer = metadataStorage.getMetadata(METADATA_KEYS.SERIALIZER, target, key);
+    resolved = {
+      name: outboundName(target, key, ctx.naming),
+      // `writeonly` is accepted on input but must never be echoed back out.
+      skip: access === 'none' || access === 'writeonly',
+      ...(serializer ? { serializer } : {}),
+    };
+    byKey.set(key, resolved);
+  }
+  return resolved;
+}
+
+/** Per-property deserialization facts, resolved once instead of per call. */
+interface InboundProperty {
+  deserializer?: any;
+  polymorphic?: any;
+  typeFn?: () => ClassConstructor<any>;
+}
+
 interface InboundNames {
   /** JSON name -> property key, for properties this payload is allowed to set. */
   accept: Map<string, string>;
+  /** property key -> the conversion metadata that applies to it. */
+  props: Map<string, InboundProperty>;
   /**
    * JSON names that belong to a declared property the payload may NOT set
    * (`@JsonIgnore` / `@JsonReadOnly`). They are dropped rather than treated as unknown
@@ -88,7 +151,7 @@ interface InboundNames {
 
 // Name maps are derived purely from decorator metadata, which is fixed once a class is
 // declared, so they are cached per (prototype, naming strategy).
-const inboundCache = new WeakMap<object, Map<unknown, InboundNames>>();
+const inboundCache = new WeakMap<object, { version: number; byStrategy: Map<unknown, InboundNames> }>();
 
 /**
  * Builds the JSON-name -> property-key lookup used when reading a payload.
@@ -99,16 +162,17 @@ const inboundCache = new WeakMap<object, Map<unknown, InboundNames>>();
  * keep it working for older clients.
  */
 function inboundNameMap(target: any, ctx: DeserializeContext): InboundNames {
-  let byStrategy = inboundCache.get(target);
-  if (!byStrategy) {
-    byStrategy = new Map();
-    inboundCache.set(target, byStrategy);
+  let entry = inboundCache.get(target);
+  if (!entry || entry.version !== metadataStorage.version) {
+    entry = { version: metadataStorage.version, byStrategy: new Map() };
+    inboundCache.set(target, entry);
   }
-  const cached = byStrategy.get(ctx.namingKey);
+  const cached = entry.byStrategy.get(ctx.namingKey);
   if (cached) return cached;
 
   const accept = new Map<string, string>();
   const blocked = new Set<string>();
+  const props = new Map<string, InboundProperty>();
 
   const claim = (external: string, key: string) => {
     const owner = accept.get(external);
@@ -134,16 +198,34 @@ function inboundNameMap(target: any, ctx: DeserializeContext): InboundNames {
     }
 
     for (const name of names) claim(name, key);
+
+    const deserializer = metadataStorage.getMetadata(METADATA_KEYS.DESERIALIZER, target, key);
+    const polymorphic = metadataStorage.getMetadata(METADATA_KEYS.POLYMORPHIC, target, key);
+    const typeFn = metadataStorage.getMetadata(METADATA_KEYS.TYPE, target, key);
+    if (deserializer || polymorphic || typeFn) {
+      props.set(key, {
+        ...(deserializer ? { deserializer } : {}),
+        ...(polymorphic ? { polymorphic } : {}),
+        ...(typeFn ? { typeFn } : {}),
+      });
+    }
   }
 
-  const result = { accept, blocked };
-  byStrategy.set(ctx.namingKey, result);
+  const result = { accept, blocked, props };
+  entry.byStrategy.set(ctx.namingKey, result);
   return result;
 }
 
-async function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext): Promise<any> {
+async function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: number): Promise<any> {
   if (obj === null || obj === undefined || typeof obj !== 'object') {
     return obj;
+  }
+
+  if (depth > ctx.maxDepth) {
+    throw new JsonMappingError(
+      `Maximum nesting depth of ${ctx.maxDepth} exceeded while serializing. ` +
+      `Raise it with the maxDepth option if this structure is legitimate.`
+    );
   }
 
   if (obj instanceof Date) {
@@ -162,7 +244,7 @@ async function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext): 
     if (Array.isArray(obj)) {
       const out: any[] = [];
       for (const item of obj) {
-        out.push(await serialize(item, ancestors, ctx));
+        out.push(await serialize(item, ancestors, ctx, depth + 1));
       }
       return out;
     }
@@ -171,21 +253,17 @@ async function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext): 
 
     const result: any = {};
     for (const key of Object.keys(obj)) {
-      const access = accessOf(target, key);
-      // `writeonly` is accepted on input but must never be echoed back out.
-      if (access === 'none' || access === 'writeonly') continue;
+      const property = outboundFor(target, key, ctx);
+      if (property.skip) continue;
 
       const value = obj[key];
-      const name = outboundName(target, key, ctx.naming);
 
       // Custom serializers only see real values. Handing a serializer `undefined` for a
       // property that was simply never set turns an optional field into a crash.
-      const serializerCls = target ? metadataStorage.getMetadata(METADATA_KEYS.SERIALIZER, target, key) : undefined;
-      if (serializerCls && value !== null && value !== undefined) {
-        const serializer = new serializerCls();
-        result[name] = await serializer.serialize(value);
+      if (property.serializer && value !== null && value !== undefined) {
+        result[property.name] = await converterFor(property.serializer).serialize(value);
       } else {
-        result[name] = await serialize(value, ancestors, ctx);
+        result[property.name] = await serialize(value, ancestors, ctx, depth + 1);
       }
     }
 
@@ -197,11 +275,18 @@ async function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext): 
   }
 }
 
-async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: DeserializeContext): Promise<T> {
+async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: DeserializeContext, depth: number): Promise<T> {
   if (plain === null || plain === undefined) return plain;
 
+  if (depth > ctx.maxDepth) {
+    throw new JsonMappingError(
+      `Maximum nesting depth of ${ctx.maxDepth} exceeded while deserializing. ` +
+      `Raise it with the maxDepth option if this structure is legitimate.`
+    );
+  }
+
   if (Array.isArray(plain)) {
-    const results = await Promise.all(plain.map(item => deserialize(clazz, item, ctx)));
+    const results = await Promise.all(plain.map(item => deserialize(clazz, item, ctx, depth + 1)));
     return results as any;
   }
 
@@ -235,24 +320,24 @@ async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deser
 
     const value = plain[incoming];
 
+    const property = inbound.props.get(key);
+
     // Custom Deserializer
-    const deserializerCls = metadataStorage.getMetadata(METADATA_KEYS.DESERIALIZER, target, key);
-    if (deserializerCls) {
-      const deserializer = new deserializerCls();
-      instance[key as keyof T] = await deserializer.deserialize(value);
+    if (property?.deserializer) {
+      instance[key as keyof T] = await converterFor(property.deserializer).deserialize(value);
       continue;
     }
 
     // Polymorphic
-    const poly = metadataStorage.getMetadata(METADATA_KEYS.POLYMORPHIC, target, key);
+    const poly = property?.polymorphic;
     if (poly && value !== null && value !== undefined) {
       const { discriminator, subTypes, onUnknown, fallback } = poly;
 
       const resolve = async (item: any): Promise<any> => {
         if (item === null || item === undefined || typeof item !== 'object') return item;
         const subTypeInfo = subTypes.find((s: any) => item[discriminator] === s.name);
-        if (subTypeInfo) return deserialize(subTypeInfo.value, item, ctx);
-        if (fallback) return deserialize(fallback, item, ctx);
+        if (subTypeInfo) return deserialize(subTypeInfo.value, item, ctx, depth + 1);
+        if (fallback) return deserialize(fallback, item, ctx, depth + 1);
         if (onUnknown === 'error') {
           throw new JsonMappingError(
             `Unknown discriminator value ${JSON.stringify(item[discriminator])} for property ` +
@@ -270,10 +355,10 @@ async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deser
     }
 
     // Nested Type
-    const typeFn = metadataStorage.getMetadata(METADATA_KEYS.TYPE, target, key);
+    const typeFn = property?.typeFn;
     if (typeFn && value !== null && value !== undefined) {
       const type = typeFn();
-      instance[key as keyof T] = await deserialize(type, value, ctx);
+      instance[key as keyof T] = await deserialize(type, value, ctx, depth + 1);
       continue;
     }
 
@@ -314,6 +399,63 @@ function collectConstraints(target: any, key: string): ValidationConstraint[] {
 }
 
 /**
+ * Everything the validator needs to know about one property, resolved once.
+ */
+interface PropertyPlan {
+  key: string;
+  constraints: ValidationConstraint[];
+  isOptional: boolean;
+  isNested: boolean;
+  condition?: (object: any) => boolean;
+}
+
+interface CachedPlan {
+  version: number;
+  plan: PropertyPlan[];
+}
+
+// Resolving a class's validation rules means walking its prototype chain several times per
+// property, per call — which profiling showed to be roughly half of all validation time,
+// recomputing an answer that cannot change. The result is memoized per prototype and
+// invalidated by MetadataStorage's version counter, so metadata registered late still works.
+const planCache = new WeakMap<object, CachedPlan>();
+
+function validationPlan(target: any): PropertyPlan[] {
+  const cached = planCache.get(target);
+  if (cached && cached.version === metadataStorage.version) {
+    return cached.plan;
+  }
+
+  const plan: PropertyPlan[] = [];
+  for (const key of metadataStorage.getProperties(target)) {
+    const condition = metadataStorage.getMetadata(METADATA_KEYS.CONDITION, target, key);
+    plan.push({
+      key,
+      constraints: collectConstraints(target, key),
+      isOptional: !!metadataStorage.getMetadata(METADATA_KEYS.IS_OPTIONAL, target, key),
+      isNested: !!metadataStorage.getMetadata(METADATA_KEYS.NESTED, target, key),
+      ...(condition ? { condition } : {}),
+    });
+  }
+
+  planCache.set(target, { version: metadataStorage.version, plan });
+  return plan;
+}
+
+// Serializers and deserializers are stateless by contract, so one instance per class is
+// enough. Constructing a fresh one for every property of every object was pure waste.
+const converterCache = new WeakMap<object, any>();
+
+function converterFor(clazz: any): any {
+  let instance = converterCache.get(clazz);
+  if (!instance) {
+    instance = new clazz();
+    converterCache.set(clazz, instance);
+  }
+  return instance;
+}
+
+/**
  * Records a failure without letting a later constraint overwrite an earlier one that happens
  * to share a name (two `@Min` rules, or a rule inherited and re-declared).
  */
@@ -327,9 +469,16 @@ function recordFailure(constraints: { [key: string]: string }, name: string, mes
   constraints[`${name}_${suffix}`] = message;
 }
 
-async function validateInternal(obj: any, ancestors: Set<any>): Promise<ValidationError[]> {
+async function validateInternal(obj: any, ancestors: Set<any>, depth: number, maxDepth: number): Promise<ValidationError[]> {
   const errors: ValidationError[] = [];
   if (obj === null || obj === undefined || typeof obj !== 'object') return errors;
+
+  if (depth > maxDepth) {
+    throw new JsonMappingError(
+      `Maximum nesting depth of ${maxDepth} exceeded while validating. ` +
+      `Raise it with the maxDepth option if this structure is legitimate.`
+    );
+  }
 
   // A cycle has already been validated further up the stack; re-entering it would never
   // terminate. Diamonds are still validated on each distinct path.
@@ -339,7 +488,7 @@ async function validateInternal(obj: any, ancestors: Set<any>): Promise<Validati
   try {
     if (Array.isArray(obj)) {
       for (let i = 0; i < obj.length; i++) {
-        const childErrors = await validateInternal(obj[i], ancestors);
+        const childErrors = await validateInternal(obj[i], ancestors, depth + 1, maxDepth);
         if (childErrors.length > 0) {
           errors.push({
             property: `[${i}]`,
@@ -355,32 +504,26 @@ async function validateInternal(obj: any, ancestors: Set<any>): Promise<Validati
     const target = prototypeOf(obj);
     if (!target) return errors;
 
-    const properties: string[] = metadataStorage.getProperties(target);
-
-    for (const key of properties) {
+    for (const property of validationPlan(target)) {
+      const key = property.key;
       const value = obj[key];
+
+      // Handle @ValidateIf — a false condition takes the property out of validation entirely.
+      if (property.condition && !property.condition(obj)) {
+        continue;
+      }
+
+      // Handle IsOptional
+      if (property.isOptional && (value === null || value === undefined)) {
+        continue;
+      }
+
       const propertyErrors: ValidationError = {
         property: key,
         value: value,
         constraints: {}
       };
 
-      // Handle @ValidateIf — a false condition takes the property out of validation entirely.
-      const condition = metadataStorage.getMetadata(METADATA_KEYS.CONDITION, target, key);
-      if (condition && !condition(obj)) {
-        continue;
-      }
-
-      // Handle IsOptional
-      const isOptional = metadataStorage.getMetadata(METADATA_KEYS.IS_OPTIONAL, target, key);
-      const isNullOrUndefined = value === null || value === undefined;
-
-      if (isOptional && isNullOrUndefined) {
-        continue;
-      }
-
-      // Check validation constraints
-      const constraints = collectConstraints(target, key);
       const validationArgs: ValidationArguments = {
         value: value,
         object: obj,
@@ -388,32 +531,41 @@ async function validateInternal(obj: any, ancestors: Set<any>): Promise<Validati
         constraints: []
       };
 
-      for (const constraint of constraints) {
+      for (const constraint of property.constraints) {
         validationArgs.constraints = constraint.constraints || [];
 
         let isValid = true;
+        let failedIndex = -1;
         if (constraint.each && Array.isArray(value)) {
-          for (const item of value) {
-            const itemArgs = { ...validationArgs, value: item };
-            if (!(await constraint.validate(item, itemArgs))) {
+          // Report which element failed. Previously the index was discarded, so a bad entry
+          // in a 200-item array produced a message that could not locate it.
+          for (let i = 0; i < value.length; i++) {
+            validationArgs.value = value[i];
+            if (!(await constraint.validate(value[i], validationArgs))) {
               isValid = false;
+              failedIndex = i;
               break;
             }
           }
+          validationArgs.value = value;
         } else {
           isValid = await constraint.validate(value, validationArgs);
         }
 
         if (!isValid) {
+          if (failedIndex >= 0) validationArgs.value = value[failedIndex];
           let message = typeof constraint.message === 'function'
             ? constraint.message(validationArgs)
             : constraint.message;
+          validationArgs.value = value;
 
           // Only decorate the library's own default wording. A message the caller wrote
           // is reported verbatim — prefixing it produced sentences like
           // "each element in tags must all be strings".
           if (constraint.each && !constraint.hasCustomMessage) {
-            message = `each element in ${message}`;
+            message = failedIndex >= 0
+              ? `each element in ${message} (failed at index ${failedIndex})`
+              : `each element in ${message}`;
           }
 
           recordFailure(propertyErrors.constraints, constraint.name, message);
@@ -421,9 +573,8 @@ async function validateInternal(obj: any, ancestors: Set<any>): Promise<Validati
       }
 
       // Recursive validation
-      const isNested = metadataStorage.getMetadata(METADATA_KEYS.NESTED, target, key);
-      if (isNested && value !== null && value !== undefined) {
-        const nestedErrors = await validateInternal(value, ancestors);
+      if (property.isNested && value !== null && value !== undefined) {
+        const nestedErrors = await validateInternal(value, ancestors, depth + 1, maxDepth);
         if (nestedErrors.length > 0) {
           propertyErrors.children = nestedErrors;
         }
@@ -442,7 +593,11 @@ async function validateInternal(obj: any, ancestors: Set<any>): Promise<Validati
 
 function serializeContext(options?: TransformOptions): SerializeContext {
   const resolved = resolveOptions(options);
-  return { naming: resolveNamingStrategy(resolved.namingStrategy) };
+  return {
+    naming: resolveNamingStrategy(resolved.namingStrategy),
+    namingKey: resolved.namingStrategy,
+    maxDepth: resolved.maxDepth,
+  };
 }
 
 function deserializeContext(options?: TransformOptions): DeserializeContext {
@@ -451,6 +606,7 @@ function deserializeContext(options?: TransformOptions): DeserializeContext {
     naming: resolveNamingStrategy(resolved.namingStrategy),
     namingKey: resolved.namingStrategy,
     unknownKeys: resolved.unknownKeys,
+    maxDepth: resolved.maxDepth,
   };
 }
 
@@ -461,8 +617,8 @@ function deserializeContext(options?: TransformOptions): DeserializeContext {
  * @param obj The object to validate
  * @returns Array of validation errors
  */
-export async function validate(obj: any): Promise<ValidationError[]> {
-  return validateInternal(obj, new Set());
+export async function validate(obj: any, options?: TransformOptions): Promise<ValidationError[]> {
+  return validateInternal(obj, new Set(), 0, resolveOptions(options).maxDepth);
 }
 
 /**
@@ -492,13 +648,13 @@ export async function toPlain<T>(obj: T, options?: TransformOptions): Promise<an
   if (obj === null || obj === undefined) return obj;
 
   if (resolveOptions(options).validate) {
-    const errors = await validate(obj);
+    const errors = await validate(obj, options);
     if (errors.length > 0) {
       throw new JsonValidationError('Validation failed during serialization', errors);
     }
   }
 
-  return serialize(obj, new Set(), serializeContext(options));
+  return serialize(obj, new Set(), serializeContext(options), 0);
 }
 
 /**
@@ -524,10 +680,10 @@ export async function toJson<T>(obj: T, options?: TransformOptions): Promise<str
  * @returns Class instance
  */
 export async function toInstance<T>(clazz: ClassConstructor<T>, plain: any, options?: TransformOptions): Promise<T> {
-  const instance = await deserialize(clazz, plain, deserializeContext(options));
+  const instance = await deserialize(clazz, plain, deserializeContext(options), 0);
 
   if (resolveOptions(options).validate) {
-    const errors = await validate(instance);
+    const errors = await validate(instance, options);
     if (errors.length > 0) {
       throw new JsonValidationError('Validation failed during deserialization', errors);
     }

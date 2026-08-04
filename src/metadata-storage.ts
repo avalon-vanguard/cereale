@@ -1,6 +1,20 @@
 export class MetadataStorage {
   private static instance: MetadataStorage;
-  
+
+  /**
+   * Bumped whenever any metadata is written.
+   *
+   * Decorators run at class-definition time, so in practice this stops changing once the
+   * application has loaded. Derived structures (see the validation plan cache in utils.ts)
+   * record the version they were built from and rebuild if it moves, which keeps caching
+   * safe even for metadata registered late through `registerDecorator`.
+   */
+  private _version = 0;
+
+  get version(): number {
+    return this._version;
+  }
+
   // Maps a prototype to its property names
   private properties = new WeakMap<any, string[]>();
   
@@ -24,6 +38,7 @@ export class MetadataStorage {
    * Defines metadata for a specific property on a target.
    */
   defineMetadata(key: string, value: any, target: any, propertyKey?: string) {
+    this._version++;
     if (propertyKey) {
       let targetMap = this.propertyMetadata.get(target);
       if (!targetMap) {
@@ -101,6 +116,7 @@ export class MetadataStorage {
    * Registers a property for a target.
    */
   registerProperty(target: any, propertyKey: string) {
+    this._version++;
     let props = this.properties.get(target);
     if (!props) {
       props = [];
