@@ -383,14 +383,14 @@ describe('write-only redaction in validation errors', () => {
   it('does not redact a value that merely sits next to a secret', async () => {
     class Form {
       @IsIn(['a', 'b'])
-      choice: string;
+      choice!: 'a' | 'b';
 
       @JsonWriteOnly()
       @IsString()
       token: string;
     }
     const form = new Form();
-    form.choice = 'zzz';
+    form.choice = 'zzz' as 'a';
     form.token = 'secret-token';
 
     const errors = await validate(form);

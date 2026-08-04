@@ -13,7 +13,7 @@ import {
   ArrayMaxSize, 
   IsNotIn, 
   Validate, 
-  registerDecorator,
+  defineRule,
   JsonType,
   JsonPolymorphic,
   JsonMapper,
@@ -244,21 +244,14 @@ describe('Additional Decorators', () => {
 
   describe('registerDecorator', () => {
     it('should register a custom decorator with functional validator', async () => {
-      function IsEven() {
-        return function (object: any, propertyName: string) {
-          registerDecorator({
-            name: 'isEven',
-            target: object.constructor,
-            propertyName: propertyName,
-            validator: (value: any) => typeof value === 'number' && value % 2 === 0,
-          });
-        };
-      }
-
       class Test {
-        @IsEven()
-        val: number;
+        val: number = 0;
       }
+      defineRule(Test, 'val', {
+        name: 'isEven',
+        validate: (value: any) => typeof value === 'number' && value % 2 === 0,
+        message: 'val must be even',
+      });
 
       const t = new Test();
       t.val = 2;
@@ -271,19 +264,15 @@ describe('Additional Decorators', () => {
       class MyValidator implements ValidatorConstraintInterface {
         validate(v: any) { return v === 'ok'; }
       }
-      function IsOk() {
-        return function (object: any, propertyName: string) {
-          registerDecorator({
-            name: 'isOk',
-            target: object.constructor,
-            propertyName: propertyName,
-            validator: MyValidator,
-          });
-        };
-      }
       class Test {
-        @IsOk() val: string;
+        val: string = '';
       }
+      const validator = new MyValidator();
+      defineRule(Test, 'val', {
+        name: 'isOk',
+        validate: (v: any) => validator.validate(v),
+        message: 'val must be ok',
+      });
       const t = new Test();
       t.val = 'ok';
       expect(await JsonMapper.validate(t)).toHaveLength(0);

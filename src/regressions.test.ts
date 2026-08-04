@@ -21,7 +21,7 @@ describe('regressions', () => {
       }
       class Sub extends Base {
         @IsString()
-        declare name: string;
+        override name: string = '';
       }
 
       const s = new Sub();
@@ -35,7 +35,7 @@ describe('regressions', () => {
     it('enforces base constraints that the subclass never restates', async () => {
       abstract class Media {
         @IsString()
-        title: string;
+        title: string = '';
       }
       class Book extends Media {
         @IsString()
@@ -57,7 +57,7 @@ describe('regressions', () => {
       }
       class Sub extends Base {
         @IsString()
-        declare type: string;
+        override type: string = '';
       }
 
       const s = new Sub();

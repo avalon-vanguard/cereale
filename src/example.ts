@@ -25,8 +25,7 @@ import {
   Validate,
   ValidatorConstraintInterface,
   ValidationArguments,
-  registerDecorator,
-  ValidationOptions
+  Matches,
 } from './index.js';
 
 // --- Custom Validators ---
@@ -42,17 +41,8 @@ class IsLongerThan implements ValidatorConstraintInterface {
   }
 }
 
-function IsSlug(options?: ValidationOptions) {
-  return function (object: any, propertyName: string) {
-    registerDecorator({
-      name: 'isSlug',
-      target: object.constructor,
-      propertyName: propertyName,
-      ...(options ? { options } : {}),
-      validator: (value: any) => typeof value === 'string' && /^[a-z0-9-]+$/.test(value)
-    });
-  };
-}
+/** A custom rule is just a decorator that composes an existing one. */
+const IsSlug = () => Matches(/^[a-z0-9-]+$/, { message: 'name must be a lowercase slug' });
 
 // --- Custom Serializers ---
 
@@ -76,12 +66,14 @@ enum Format {
 }
 
 abstract class Media {
+  // Standard decorators cannot be applied to an `abstract` member, so the discriminator is a
+  // concrete field the subclasses override.
   @IsString()
-  abstract type: string;
+  type: string = '';
 
   // Declared once here. Subclasses inherit the rule without restating it.
   @IsString()
-  title: string;
+  title: string = '';
 }
 
 class Book extends Media {
@@ -111,7 +103,7 @@ class Movie extends Media {
   duration: number;
 
   // Only checked for films that claim to be part of a series.
-  @ValidateIf((movie: Movie) => movie.duration > 200)
+  @ValidateIf<Movie>(movie => movie.duration > 200)
   @IsString()
   intermissionNote?: string;
 }
@@ -122,7 +114,7 @@ class Library {
   id: string;
 
   @IsString()
-  @IsSlug({ message: 'name must be a lowercase slug' })
+  @IsSlug()
   name: string;
 
   @JsonProperty('curator_email')
@@ -136,11 +128,12 @@ class Library {
 
   @IsArray()
   @ValidateNested({ each: true })
-  @JsonPolymorphic('type', [
+  // Naming the base type has the subtype list checked against it.
+  @JsonPolymorphic<Media>('type', [
     { value: Book, name: 'book' },
     { value: Movie, name: 'movie' }
   ])
-  items: Media[];
+  items: Media[] = [];
 }
 
 // --- Execution ---

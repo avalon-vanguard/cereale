@@ -41,16 +41,18 @@ class DateDeserializer implements JsonDeserializer<string, Date> {
 
 // --- Domain Models ---
 abstract class Media {
+  // Standard decorators cannot be applied to an `abstract` member, so the base declares a
+  // concrete field the subclasses override.
   @IsString()
-  abstract type: string;
+  type: string = '';
 
   @IsString()
-  title: string;
+  title: string = '';
 }
 
 class Book extends Media {
   @IsString()
-  type: string = 'book';
+  override type: string = 'book';
 
   @IsString()
   author: string;
@@ -63,7 +65,7 @@ class Book extends Media {
 
 class Movie extends Media {
   @IsString()
-  type: string = 'movie';
+  override type: string = 'movie';
 
   @IsInt()
   @Min(1)
@@ -162,7 +164,7 @@ describe('JsonMapper', () => {
 
       @ArrayNotEmpty()
       @IsIn(['admin', 'user', 'guest'], { each: true })
-      roles: string[];
+      roles!: ('admin' | 'user' | 'guest')[];
 
       @IsUrl()
       @IsOptional()
@@ -224,7 +226,7 @@ describe('JsonMapper', () => {
       user.username = 'johndoe';
       user.email = 'john@example.com';
       user.active = true;
-      user.roles = ['superadmin'];
+      user.roles = ['superadmin' as 'admin'];
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(1);

@@ -5,7 +5,71 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - 2026-08-04
+
+**Breaking.** Cereale moves to TC39 standard decorators, which is what makes validation rules
+type-checked against the fields they are attached to.
+
+### The headline
+
+A rule that does not fit its field is now a compile error:
+
+```ts
+class User {
+  @IsString() name!: string;   // fine
+  @IsString() age!: number;    // Type 'number' is not assignable to type 'string'
+}
+```
+
+Legacy decorators receive `(target: any, key: string)` and lose the field's type entirely, so
+this was impossible in v1. Standard decorators receive `ClassFieldDecoratorContext<This, Value>`,
+which carries it. Checked rules include:
+
+- scalar rules against scalar fields (`@Min` on a string is rejected)
+- `{ each: true }` against arrays (`@IsString({ each: true })` demands a `string[]`, and a bare
+  `@IsString()` on a `string[]` is rejected)
+- `@JsonType(() => Address)` against the field's class
+- `@JsonSerialize` / `@JsonDeserialize` against the field's type
+- `@IsIn([...])` and `@IsEnum(E)` against the field's value type
+
+17 tests invoke the real compiler to assert these stay rejected.
+
+### Migration
+
+- Remove `"experimentalDecorators": true`; add `"ESNext.Decorators"` to `lib`.
+- `registerDecorator({ target, propertyName, validator })` is replaced by
+  `defineRule(Class, 'field', constraint)`.
+- Decorators cannot be applied to `abstract` fields. Declare the field concretely in the base.
+- Field types may need tightening where a rule narrows them: `@IsIn(['a','b']) x!: string`
+  becomes `x!: 'a' | 'b'`.
+- `@JsonPolymorphic` takes its base type explicitly to check subtypes:
+  `@JsonPolymorphic<Media>('type', [...])`.
+- `@ValidateIf` takes the class as a type argument: `@ValidateIf<Movie>(m => ...)`.
+
+Everything else — the engine, options, naming strategies, access control, error helpers, the
+sync API — is unchanged.
+
+### Removed
+
+- `metadata-storage.ts` and its WeakMap singleton. Metadata now lives on `context.metadata`,
+  the language's own mechanism, which also removes the dual ESM/CJS double-singleton hazard.
+- `registerDecorator`, replaced by `defineRule`.
+
+### Fixed
+
+- Inheritance merging is now structural rather than reconstructed: `context.metadata` inherits
+  through the prototype chain, so the subclass-shadowing defect fixed by hand in 0.1.0 cannot
+  reoccur by construction. Identical inherited rules are still collapsed so re-stating a rule
+  on an override does not double-report.
+
+### Toolchain
+
+Standard decorators are transformed by `tsc` and by esbuild; **oxc does not implement them
+yet**. The library builds with `tsc` and consumers bundling with esbuild or Vite are fine, but
+the test runner (Vitest 4, which uses oxc) needs an esbuild transform plugin — see
+`vitest.config.ts`. Projects on an oxc-based toolchain should stay on 1.x for now.
+
+## [Unreleased] (released as 1.0.0)
 
 ### Added
 

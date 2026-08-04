@@ -1,6 +1,9 @@
 import { ClassConstructor } from './interfaces.js';
-import { METADATA_KEYS, PropertyAccess, ValidationConstraint, ValidationArguments } from './decorators.js';
-import { metadataStorage } from './metadata-storage.js';
+import {
+  modelOf, modelOfInstance, modelVersion,
+  type ClassModel, type PropertyAccess, type PropertyModel,
+  type ValidationArguments, type ValidationConstraint,
+} from './metadata.js';
 import { NamingStrategyFn, resolveNamingStrategy } from './naming.js';
 import { TransformOptions, UnknownKeyPolicy, resolveOptions } from './config.js';
 
@@ -62,25 +65,13 @@ interface DeserializeContext {
   maxDepth: number;
 }
 
-/**
- * Resolves the metadata lookup target for a value.
- *
- * `Object.getPrototypeOf` rather than `obj.constructor.prototype`: the latter throws on
- * null-prototype objects (which have no `constructor`) and lies for instances whose
- * `constructor` property has been overwritten.
- */
-function prototypeOf(obj: any): any {
-  return Object.getPrototypeOf(obj) ?? undefined;
-}
-
-function accessOf(target: any, key: string): PropertyAccess {
-  return (target ? metadataStorage.getMetadata(METADATA_KEYS.ACCESS, target, key) : undefined) ?? 'readwrite';
+function accessOf(model: ClassModel, key: string): PropertyAccess {
+  return model[key]?.access ?? 'readwrite';
 }
 
 /** The name this property takes in JSON: an explicit @JsonProperty, else the naming strategy. */
-function outboundName(target: any, key: string, naming: NamingStrategyFn): string {
-  const explicit = target ? metadataStorage.getMetadata(METADATA_KEYS.NAME, target, key) : undefined;
-  return explicit ?? naming(key);
+function outboundName(model: ClassModel, key: string, naming: NamingStrategyFn): string {
+  return model[key]?.name ?? naming(key);
 }
 
 /** Per-property serialization facts, resolved once instead of per call. */
@@ -93,7 +84,7 @@ interface OutboundProperty {
   serializer?: any;
 }
 
-const outboundCache = new WeakMap<object, { version: number; byStrategy: Map<unknown, Map<string, OutboundProperty>> }>();
+const outboundCache = new WeakMap<ClassModel, { version: number; byStrategy: Map<unknown, Map<string, OutboundProperty>> }>();
 
 /**
  * Resolves how one property is written out, memoized per (prototype, naming strategy).
@@ -101,16 +92,11 @@ const outboundCache = new WeakMap<object, { version: number; byStrategy: Map<unk
  * Serialization walks the runtime keys of each object, so undeclared properties turn up here
  * too; they memoize just as well, since the naming strategy is deterministic.
  */
-function outboundFor(target: any, key: string, ctx: SerializeContext): OutboundProperty {
-  if (!target) {
-    // Null-prototype object: nothing is declared, so there is nothing to cache against.
-    return { name: ctx.naming(key), skip: false };
-  }
-
-  let entry = outboundCache.get(target);
-  if (!entry || entry.version !== metadataStorage.version) {
-    entry = { version: metadataStorage.version, byStrategy: new Map() };
-    outboundCache.set(target, entry);
+function outboundFor(model: ClassModel, key: string, ctx: SerializeContext): OutboundProperty {
+  let entry = outboundCache.get(model);
+  if (!entry || entry.version !== modelVersion()) {
+    entry = { version: modelVersion(), byStrategy: new Map() };
+    outboundCache.set(model, entry);
   }
 
   let byKey = entry.byStrategy.get(ctx.namingKey);
@@ -121,10 +107,10 @@ function outboundFor(target: any, key: string, ctx: SerializeContext): OutboundP
 
   let resolved = byKey.get(key);
   if (!resolved) {
-    const access = accessOf(target, key);
-    const serializer = metadataStorage.getMetadata(METADATA_KEYS.SERIALIZER, target, key);
+    const access = accessOf(model, key);
+    const serializer = model[key]?.serializer;
     resolved = {
-      name: outboundName(target, key, ctx.naming),
+      name: outboundName(model, key, ctx.naming),
       // `writeonly` is accepted on input but must never be echoed back out.
       skip: access === 'none' || access === 'writeonly',
       ...(serializer ? { serializer } : {}),
@@ -157,7 +143,7 @@ interface InboundNames {
 
 // Name maps are derived purely from decorator metadata, which is fixed once a class is
 // declared, so they are cached per (prototype, naming strategy).
-const inboundCache = new WeakMap<object, { version: number; byStrategy: Map<unknown, InboundNames> }>();
+const inboundCache = new WeakMap<ClassModel, { version: number; byStrategy: Map<unknown, InboundNames> }>();
 
 /**
  * Builds the JSON-name -> property-key lookup used when reading a payload.
@@ -167,11 +153,11 @@ const inboundCache = new WeakMap<object, { version: number; byStrategy: Map<unkn
  * property therefore stops the old name from being silently accepted — add `@JsonAlias` to
  * keep it working for older clients.
  */
-function inboundNameMap(target: any, ctx: DeserializeContext): InboundNames {
-  let entry = inboundCache.get(target);
-  if (!entry || entry.version !== metadataStorage.version) {
-    entry = { version: metadataStorage.version, byStrategy: new Map() };
-    inboundCache.set(target, entry);
+function inboundNameMap(model: ClassModel, ctx: DeserializeContext): InboundNames {
+  let entry = inboundCache.get(model);
+  if (!entry || entry.version !== modelVersion()) {
+    entry = { version: modelVersion(), byStrategy: new Map() };
+    inboundCache.set(model, entry);
   }
   const cached = entry.byStrategy.get(ctx.namingKey);
   if (cached) return cached;
@@ -191,13 +177,10 @@ function inboundNameMap(target: any, ctx: DeserializeContext): InboundNames {
     accept.set(external, key);
   };
 
-  for (const key of metadataStorage.getProperties(target)) {
-    const names = [
-      outboundName(target, key, ctx.naming),
-      ...(metadataStorage.getMetadata(METADATA_KEYS.ALIASES, target, key) || []),
-    ];
+  for (const [key, property] of Object.entries(model)) {
+    const names = [outboundName(model, key, ctx.naming), ...(property.aliases ?? [])];
 
-    const access = accessOf(target, key);
+    const access = accessOf(model, key);
     if (access === 'none' || access === 'readonly') {
       for (const name of names) blocked.add(name);
       continue;
@@ -205,14 +188,11 @@ function inboundNameMap(target: any, ctx: DeserializeContext): InboundNames {
 
     for (const name of names) claim(name, key);
 
-    const deserializer = metadataStorage.getMetadata(METADATA_KEYS.DESERIALIZER, target, key);
-    const polymorphic = metadataStorage.getMetadata(METADATA_KEYS.POLYMORPHIC, target, key);
-    const typeFn = metadataStorage.getMetadata(METADATA_KEYS.TYPE, target, key);
-    if (deserializer || polymorphic || typeFn) {
+    if (property.deserializer || property.polymorphic || property.type) {
       props.set(key, {
-        ...(deserializer ? { deserializer } : {}),
-        ...(polymorphic ? { polymorphic } : {}),
-        ...(typeFn ? { typeFn } : {}),
+        ...(property.deserializer ? { deserializer: property.deserializer } : {}),
+        ...(property.polymorphic ? { polymorphic: property.polymorphic } : {}),
+        ...(property.type ? { typeFn: property.type } : {}),
       });
     }
   }
@@ -295,11 +275,11 @@ function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: 
       return out;
     }
 
-    const target = prototypeOf(obj);
+    const model = modelOfInstance(obj);
 
     const result: any = {};
     for (const key of Object.keys(obj)) {
-      const property = outboundFor(target, key, ctx);
+      const property = outboundFor(model, key, ctx);
       if (property.skip) continue;
 
       const value = obj[key];
@@ -347,8 +327,7 @@ function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deserialize
   if (typeof plain !== 'object') return plain;
 
   const instance = new clazz();
-  const target = clazz.prototype;
-  const inbound = inboundNameMap(target, ctx);
+  const inbound = inboundNameMap(modelOf(clazz), ctx);
 
   for (const incoming of Object.keys(plain)) {
     if (FORBIDDEN_KEYS.has(incoming)) continue;
@@ -429,36 +408,6 @@ function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deserialize
 }
 
 /**
- * Collects the validation constraints that apply to a property, merged across the whole
- * prototype chain.
- *
- * A subclass that re-decorates an inherited property registers its constraints against its
- * own prototype. Reading only the nearest set would silently drop everything the base class
- * declared, so the chain is flattened base-first. Constraints that are genuinely identical
- * (same rule, same fixed message) are collapsed so that re-stating `@IsString()` on an
- * override does not report the same failure twice; anything with a computed message — custom
- * validators in particular — is always kept.
- */
-function collectConstraints(target: any, key: string): ValidationConstraint[] {
-  const levels: ValidationConstraint[][] = metadataStorage.getMetadataChain(METADATA_KEYS.VALIDATION, target, key);
-  const merged: ValidationConstraint[] = [];
-  const seen = new Set<string>();
-
-  for (const level of levels) {
-    for (const constraint of level) {
-      if (typeof constraint.message === 'string') {
-        const identity = `${constraint.name}|${String(constraint.constraints)}|${constraint.message}`;
-        if (seen.has(identity)) continue;
-        seen.add(identity);
-      }
-      merged.push(constraint);
-    }
-  }
-
-  return merged;
-}
-
-/**
  * Everything the validator needs to know about one property, resolved once.
  */
 interface PropertyPlan {
@@ -476,33 +425,53 @@ interface CachedPlan {
   plan: PropertyPlan[];
 }
 
-// Resolving a class's validation rules means walking its prototype chain several times per
-// property, per call — which profiling showed to be roughly half of all validation time,
-// recomputing an answer that cannot change. The result is memoized per prototype and
-// invalidated by MetadataStorage's version counter, so metadata registered late still works.
-const planCache = new WeakMap<object, CachedPlan>();
+// Turning a class model into a per-property plan is cheap, but doing it on every call was
+// measurably not: profiling showed roughly half of all validation time re-deriving answers
+// that cannot change. Plans are memoized per model and invalidated by the model version.
+const planCache = new WeakMap<ClassModel, CachedPlan>();
 
-function validationPlan(target: any): PropertyPlan[] {
-  const cached = planCache.get(target);
-  if (cached && cached.version === metadataStorage.version) {
+/**
+ * Collapses rules that are genuinely identical.
+ *
+ * Inheritance is structural here: a subclass's model starts as a copy of its base's, so
+ * re-stating `@IsString()` on an override would otherwise report the same failure twice.
+ * Only rules with a fixed message are compared — anything with a computed message, custom
+ * validators in particular, is always kept, since two of them can differ while looking alike.
+ */
+function dedupe(constraints: ValidationConstraint[]): ValidationConstraint[] {
+  const kept: ValidationConstraint[] = [];
+  const seen = new Set<string>();
+  for (const constraint of constraints) {
+    if (typeof constraint.message === 'string') {
+      const identity = `${constraint.name}|${String(constraint.constraints)}|${constraint.message}|${constraint.each ?? false}`;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+    }
+    kept.push(constraint);
+  }
+  return kept;
+}
+
+function validationPlan(model: ClassModel): PropertyPlan[] {
+  const cached = planCache.get(model);
+  if (cached && cached.version === modelVersion()) {
     return cached.plan;
   }
 
   const plan: PropertyPlan[] = [];
-  for (const key of metadataStorage.getProperties(target)) {
-    const condition = metadataStorage.getMetadata(METADATA_KEYS.CONDITION, target, key);
-    const access = accessOf(target, key);
+  for (const [key, property] of Object.entries(model) as [string, PropertyModel][]) {
+    const access = property.access ?? 'readwrite';
     plan.push({
       key,
-      constraints: collectConstraints(target, key),
-      isOptional: !!metadataStorage.getMetadata(METADATA_KEYS.IS_OPTIONAL, target, key),
-      isNested: !!metadataStorage.getMetadata(METADATA_KEYS.NESTED, target, key),
+      constraints: dedupe(property.constraints),
+      isOptional: !!property.optional,
+      isNested: !!property.nested,
       redact: access === 'writeonly' || access === 'none',
-      ...(condition ? { condition } : {}),
+      ...(property.condition ? { condition: property.condition } : {}),
     });
   }
 
-  planCache.set(target, { version: metadataStorage.version, plan });
+  planCache.set(model, { version: modelVersion(), plan });
   return plan;
 }
 
@@ -644,10 +613,7 @@ function validateInternal(obj: any, ancestors: Set<any>, depth: number, maxDepth
       return errors;
     }
 
-    const target = prototypeOf(obj);
-    if (!target) return errors;
-
-    for (const property of validationPlan(target)) {
+    for (const property of validationPlan(modelOfInstance(obj))) {
       const key = property.key;
       const value = obj[key];
 
