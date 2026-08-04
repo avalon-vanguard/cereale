@@ -214,6 +214,26 @@ const problems = flattenErrors(await validate(draft));
 const order = await fromJson(Order, body, { unknownKeys: 'error' });
 ```
 
+## Synchronous API
+
+Nothing on the default path is genuinely asynchronous — only a serializer, deserializer or
+validator you supply can be — so every mapping function has a synchronous twin.
+
+```typescript
+import { fromJsonSync, toJsonSync, validateSync } from 'cereale';
+
+const user = fromJsonSync(User, body);      // no await
+const errors = validateSync(user);
+const payload = toJsonSync(user);
+```
+
+`validateSync`, `validateOrRejectSync`, `toPlainSync`, `toJsonSync`, `toInstanceSync`,
+`toInstanceArraySync`, `fromJsonSync`, `fromJsonArraySync`.
+
+If one of your hooks does return a Promise, the synchronous call raises a `JsonMappingError`
+naming the async function to use instead, rather than handing back a half-built object.
+`fromRequest` has no synchronous form, since reading a request body is inherently async.
+
 ## API Reference
 
 ### Mapping Decorators
@@ -295,7 +315,10 @@ Write your own with `registerDecorator({ name, target, propertyName, validator }
 - `toInstanceArray(clazz, plain, options?)`: Same, for an array (`Promise<T[]>`).
 - `fromRequest(clazz, request, options?)`: Extracts JSON from a Fetch `Request` (`Promise<T>`).
 - `validate(obj, options?)`: Full validation, returning `Promise<ValidationError[]>`.
-- `validateOrReject(obj)`: As above, but throws `JsonValidationError`.
+- `validateOrReject(obj, options?)`: As above, but throws `JsonValidationError`.
+- Synchronous twins of all of the above except `fromRequest`: `toPlainSync`, `toJsonSync`,
+  `fromJsonSync`, `fromJsonArraySync`, `toInstanceSync`, `toInstanceArraySync`,
+  `validateSync`, `validateOrRejectSync`.
 - `configure(options)` / `getConfig()` / `resetConfig()`: Library-wide defaults.
 
 ### Error Handling
@@ -310,6 +333,10 @@ flattenErrors(errors);        // { "items[0].qty": ["qty must be at least 1"] }
 formatErrors(errors);         // "items[0].qty: qty must be at least 1"
 collectErrorMessages(errors); // ["qty must be at least 1"]
 ```
+
+Values of properties that never leave the process — `@JsonWriteOnly` and `@JsonIgnore` — are
+replaced with `REDACTED` in `ValidationError.value`, so a rejected password does not travel
+into your logs inside an error object. The property name and message are unaffected.
 
 `JsonMappingError` is raised when a value cannot be mapped at all — a body that is not
 JSON, a circular reference, an unknown discriminator under `{ onUnknown: 'error' }` — as
@@ -356,17 +383,18 @@ app.post('/user', async (req, res) => {
 Decorator metadata is fixed once your classes are declared, so cereale resolves each class's
 validation, serialization and deserialization plans once and memoizes them per prototype.
 A version counter invalidates the caches if metadata is registered late, so `registerDecorator`
-after first use still behaves correctly.
+after first use still behaves correctly. The engines are synchronous internally, so the async
+entry points do not pay for a microtask per property.
 
 Indicative throughput for a customer record with a nested address and 10 orders, measured
-against `JSON.parse` + `JSON.stringify` (5.9 us) on the same machine:
+against `JSON.parse` + `JSON.stringify` (5.8 us) on the same machine:
 
 | Operation | Time |
 | --- | --- |
-| `toInstance` (deserialize + validate) | ~19 us |
-| `toInstance` with `{ validate: false }` | ~6 us |
-| `validate` on an existing instance | ~13 us |
-| `toPlain` (validate + serialize) | ~23 us |
+| `toInstance` (deserialize + validate) | ~8 us |
+| `toInstance` with `{ validate: false }` | ~3 us |
+| `validate` on an existing instance | ~4.5 us |
+| `toPlain` (validate + serialize) | ~12 us |
 
 If you validate at the edge and map internally afterwards, `{ validate: false }` skips the
 dominant cost.

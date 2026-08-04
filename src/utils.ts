@@ -41,6 +41,12 @@ export class JsonMappingError extends Error {
  */
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
+/**
+ * Stands in for the value of a property that is never serialized, so that a failing password
+ * does not travel inside a ValidationError into whatever logs the caller writes.
+ */
+export const REDACTED = '[redacted]';
+
 // --- Internal Engine ---
 
 interface SerializeContext {
@@ -216,7 +222,47 @@ function inboundNameMap(target: any, ctx: DeserializeContext): InboundNames {
   return result;
 }
 
-async function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: number): Promise<any> {
+
+/**
+ * The engines below are written synchronously. Anything a user hook makes asynchronous — a
+ * serializer, deserializer or validator that returns a Promise — is recorded here instead of
+ * being awaited inline, and reconciled once at the end.
+ *
+ * This buys two things. The `*Sync` entry points can simply refuse to continue if the list is
+ * non-empty, without a second copy of the traversal logic to keep in step. And the async entry
+ * points stop paying for a microtask per property on the overwhelmingly common path where no
+ * hook is actually asynchronous.
+ */
+type Deferred = Promise<unknown>[];
+
+function isThenable(value: any): value is Promise<any> {
+  return value !== null && typeof value === 'object' && typeof value.then === 'function';
+}
+
+/** Settles any deferred work recorded during a traversal. */
+async function settle(deferred: Deferred): Promise<void> {
+  while (deferred.length > 0) {
+    // A hook may itself queue more work (a serializer returning nested async values).
+    const batch = deferred.splice(0, deferred.length);
+    await Promise.all(batch);
+  }
+}
+
+/**
+ * Rejects a synchronous call that turned out to need asynchronous work.
+ */
+function refuseAsync(deferred: Deferred, operation: string, asyncName: string): void {
+  if (deferred.length === 0) return;
+  // Nothing will await these now; swallow rejections so they do not surface as unhandled.
+  for (const promise of deferred) promise.catch(() => undefined);
+  deferred.length = 0;
+  throw new JsonMappingError(
+    `${operation} requires every serializer, deserializer and validator to be synchronous, ` +
+    `but one returned a Promise. Use ${asyncName} instead, or make the hook synchronous.`
+  );
+}
+
+function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: number, deferred: Deferred): any {
   if (obj === null || obj === undefined || typeof obj !== 'object') {
     return obj;
   }
@@ -244,7 +290,7 @@ async function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, d
     if (Array.isArray(obj)) {
       const out: any[] = [];
       for (const item of obj) {
-        out.push(await serialize(item, ancestors, ctx, depth + 1));
+        out.push(serialize(item, ancestors, ctx, depth + 1, deferred));
       }
       return out;
     }
@@ -261,9 +307,18 @@ async function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, d
       // Custom serializers only see real values. Handing a serializer `undefined` for a
       // property that was simply never set turns an optional field into a crash.
       if (property.serializer && value !== null && value !== undefined) {
-        result[property.name] = await converterFor(property.serializer).serialize(value);
+        const produced = converterFor(property.serializer).serialize(value);
+        if (isThenable(produced)) {
+          const slot = property.name;
+          // Claim the key now so the deferred write lands in declaration order rather than
+          // being appended after every synchronous property.
+          result[slot] = undefined;
+          deferred.push(produced.then((settled: any) => { result[slot] = settled; }));
+        } else {
+          result[property.name] = produced;
+        }
       } else {
-        result[property.name] = await serialize(value, ancestors, ctx, depth + 1);
+        result[property.name] = serialize(value, ancestors, ctx, depth + 1, deferred);
       }
     }
 
@@ -275,7 +330,7 @@ async function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, d
   }
 }
 
-async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: DeserializeContext, depth: number): Promise<T> {
+function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: DeserializeContext, depth: number, deferred: Deferred): T {
   if (plain === null || plain === undefined) return plain;
 
   if (depth > ctx.maxDepth) {
@@ -286,8 +341,7 @@ async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deser
   }
 
   if (Array.isArray(plain)) {
-    const results = await Promise.all(plain.map(item => deserialize(clazz, item, ctx, depth + 1)));
-    return results as any;
+    return plain.map(item => deserialize(clazz, item, ctx, depth + 1, deferred)) as any;
   }
 
   if (typeof plain !== 'object') return plain;
@@ -324,7 +378,15 @@ async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deser
 
     // Custom Deserializer
     if (property?.deserializer) {
-      instance[key as keyof T] = await converterFor(property.deserializer).deserialize(value);
+      const produced = converterFor(property.deserializer).deserialize(value);
+      if (isThenable(produced)) {
+        const slot = key as keyof T;
+        // Claim the key now so property order matches the synchronous path.
+        instance[slot] = undefined as any;
+        deferred.push(produced.then((settled: any) => { instance[slot] = settled; }));
+      } else {
+        instance[key as keyof T] = produced;
+      }
       continue;
     }
 
@@ -333,11 +395,11 @@ async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deser
     if (poly && value !== null && value !== undefined) {
       const { discriminator, subTypes, onUnknown, fallback } = poly;
 
-      const resolve = async (item: any): Promise<any> => {
+      const resolve = (item: any): any => {
         if (item === null || item === undefined || typeof item !== 'object') return item;
         const subTypeInfo = subTypes.find((s: any) => item[discriminator] === s.name);
-        if (subTypeInfo) return deserialize(subTypeInfo.value, item, ctx, depth + 1);
-        if (fallback) return deserialize(fallback, item, ctx, depth + 1);
+        if (subTypeInfo) return deserialize(subTypeInfo.value, item, ctx, depth + 1, deferred);
+        if (fallback) return deserialize(fallback, item, ctx, depth + 1, deferred);
         if (onUnknown === 'error') {
           throw new JsonMappingError(
             `Unknown discriminator value ${JSON.stringify(item[discriminator])} for property ` +
@@ -348,9 +410,7 @@ async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deser
         return item;
       };
 
-      instance[key as keyof T] = Array.isArray(value)
-        ? (await Promise.all(value.map(resolve))) as any
-        : await resolve(value);
+      instance[key as keyof T] = Array.isArray(value) ? value.map(resolve) as any : resolve(value);
       continue;
     }
 
@@ -358,7 +418,7 @@ async function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deser
     const typeFn = property?.typeFn;
     if (typeFn && value !== null && value !== undefined) {
       const type = typeFn();
-      instance[key as keyof T] = await deserialize(type, value, ctx, depth + 1);
+      instance[key as keyof T] = deserialize(type, value, ctx, depth + 1, deferred);
       continue;
     }
 
@@ -406,6 +466,8 @@ interface PropertyPlan {
   constraints: ValidationConstraint[];
   isOptional: boolean;
   isNested: boolean;
+  /** True for properties that never leave the process (@JsonWriteOnly / @JsonIgnore). */
+  redact: boolean;
   condition?: (object: any) => boolean;
 }
 
@@ -429,11 +491,13 @@ function validationPlan(target: any): PropertyPlan[] {
   const plan: PropertyPlan[] = [];
   for (const key of metadataStorage.getProperties(target)) {
     const condition = metadataStorage.getMetadata(METADATA_KEYS.CONDITION, target, key);
+    const access = accessOf(target, key);
     plan.push({
       key,
       constraints: collectConstraints(target, key),
       isOptional: !!metadataStorage.getMetadata(METADATA_KEYS.IS_OPTIONAL, target, key),
       isNested: !!metadataStorage.getMetadata(METADATA_KEYS.NESTED, target, key),
+      redact: access === 'writeonly' || access === 'none',
       ...(condition ? { condition } : {}),
     });
   }
@@ -469,7 +533,86 @@ function recordFailure(constraints: { [key: string]: string }, name: string, mes
   constraints[`${name}_${suffix}`] = message;
 }
 
-async function validateInternal(obj: any, ancestors: Set<any>, depth: number, maxDepth: number): Promise<ValidationError[]> {
+
+interface EachOutcome {
+  ok: boolean;
+  /** Index of the element that failed, or -1. */
+  index: number;
+}
+
+/** Builds the reported message, applying the `each` decoration only to library defaults. */
+function messageFor(constraint: ValidationConstraint, args: ValidationArguments, failedIndex: number): string {
+  let message = typeof constraint.message === 'function' ? constraint.message(args) : constraint.message;
+  if (constraint.each && !constraint.hasCustomMessage) {
+    message = failedIndex >= 0
+      ? `each element in ${message} (failed at index ${failedIndex})`
+      : `each element in ${message}`;
+  }
+  return message;
+}
+
+/**
+ * Runs an `each: true` constraint over an array, staying synchronous until a validator
+ * actually returns a Promise and only then continuing asynchronously.
+ */
+function evaluateEach(constraint: ValidationConstraint, items: any[], args: ValidationArguments): EachOutcome | Promise<EachOutcome> {
+  for (let i = 0; i < items.length; i++) {
+    args.value = items[i];
+    const result = constraint.validate(items[i], args);
+    if (isThenable(result)) {
+      const base = { object: args.object, property: args.property, constraints: args.constraints };
+      const tail = finishEach(constraint, items, i, result, base);
+      args.value = items;
+      return tail;
+    }
+    if (!result) {
+      args.value = items;
+      return { ok: false, index: i };
+    }
+  }
+  args.value = items;
+  return { ok: true, index: -1 };
+}
+
+async function finishEach(
+  constraint: ValidationConstraint,
+  items: any[],
+  startIndex: number,
+  firstResult: Promise<boolean>,
+  base: Omit<ValidationArguments, 'value'>
+): Promise<EachOutcome> {
+  if (!(await firstResult)) return { ok: false, index: startIndex };
+  for (let i = startIndex + 1; i < items.length; i++) {
+    if (!(await constraint.validate(items[i], { ...base, value: items[i] }))) {
+      return { ok: false, index: i };
+    }
+  }
+  return { ok: true, index: -1 };
+}
+
+/**
+ * Drops entries that ended up with nothing to report.
+ *
+ * With an asynchronous validator the verdict is not known while the tree is being built, so
+ * candidate entries are created up front and pruned once everything has settled.
+ */
+function pruneErrors(errors: ValidationError[]): ValidationError[] {
+  const kept: ValidationError[] = [];
+  for (const error of errors) {
+    const children = error.children ? pruneErrors(error.children) : undefined;
+    if (children && children.length > 0) {
+      error.children = children;
+    } else {
+      delete error.children;
+    }
+    if (Object.keys(error.constraints).length > 0 || error.children) {
+      kept.push(error);
+    }
+  }
+  return kept;
+}
+
+function validateInternal(obj: any, ancestors: Set<any>, depth: number, maxDepth: number, deferred: Deferred): ValidationError[] {
   const errors: ValidationError[] = [];
   if (obj === null || obj === undefined || typeof obj !== 'object') return errors;
 
@@ -488,7 +631,7 @@ async function validateInternal(obj: any, ancestors: Set<any>, depth: number, ma
   try {
     if (Array.isArray(obj)) {
       for (let i = 0; i < obj.length; i++) {
-        const childErrors = await validateInternal(obj[i], ancestors, depth + 1, maxDepth);
+        const childErrors = validateInternal(obj[i], ancestors, depth + 1, maxDepth, deferred);
         if (childErrors.length > 0) {
           errors.push({
             property: `[${i}]`,
@@ -520,7 +663,9 @@ async function validateInternal(obj: any, ancestors: Set<any>, depth: number, ma
 
       const propertyErrors: ValidationError = {
         property: key,
-        value: value,
+        // A property that never leaves the process — a @JsonWriteOnly password, say — must
+        // not have its value copied into an error object that is about to be logged.
+        value: property.redact ? REDACTED : value,
         constraints: {}
       };
 
@@ -531,56 +676,59 @@ async function validateInternal(obj: any, ancestors: Set<any>, depth: number, ma
         constraints: []
       };
 
+      let awaited = false;
+
       for (const constraint of property.constraints) {
         validationArgs.constraints = constraint.constraints || [];
 
-        let isValid = true;
-        let failedIndex = -1;
-        if (constraint.each && Array.isArray(value)) {
+        const outcome: EachOutcome | Promise<EachOutcome> = constraint.each && Array.isArray(value)
           // Report which element failed. Previously the index was discarded, so a bad entry
           // in a 200-item array produced a message that could not locate it.
-          for (let i = 0; i < value.length; i++) {
-            validationArgs.value = value[i];
-            if (!(await constraint.validate(value[i], validationArgs))) {
-              isValid = false;
-              failedIndex = i;
-              break;
-            }
-          }
-          validationArgs.value = value;
-        } else {
-          isValid = await constraint.validate(value, validationArgs);
+          ? evaluateEach(constraint, value, validationArgs)
+          : (() => {
+              const result = constraint.validate(value, validationArgs);
+              return isThenable(result)
+                ? result.then((ok: boolean) => ({ ok, index: -1 }))
+                : { ok: result as boolean, index: -1 };
+            })();
+
+        if (isThenable(outcome)) {
+          awaited = true;
+          // The shared args object is reused as the loop advances, so snapshot what the
+          // message will need before handing control back.
+          const snapshot: ValidationArguments = {
+            value: value,
+            object: obj,
+            property: key,
+            constraints: constraint.constraints || []
+          };
+          deferred.push(outcome.then(({ ok, index }: EachOutcome) => {
+            if (ok) return;
+            if (index >= 0) snapshot.value = value[index];
+            recordFailure(propertyErrors.constraints, constraint.name, messageFor(constraint, snapshot, index));
+          }));
+          continue;
         }
 
-        if (!isValid) {
-          if (failedIndex >= 0) validationArgs.value = value[failedIndex];
-          let message = typeof constraint.message === 'function'
-            ? constraint.message(validationArgs)
-            : constraint.message;
+        if (!outcome.ok) {
+          if (outcome.index >= 0) validationArgs.value = value[outcome.index];
+          const message = messageFor(constraint, validationArgs, outcome.index);
           validationArgs.value = value;
-
-          // Only decorate the library's own default wording. A message the caller wrote
-          // is reported verbatim — prefixing it produced sentences like
-          // "each element in tags must all be strings".
-          if (constraint.each && !constraint.hasCustomMessage) {
-            message = failedIndex >= 0
-              ? `each element in ${message} (failed at index ${failedIndex})`
-              : `each element in ${message}`;
-          }
-
           recordFailure(propertyErrors.constraints, constraint.name, message);
         }
       }
 
       // Recursive validation
       if (property.isNested && value !== null && value !== undefined) {
-        const nestedErrors = await validateInternal(value, ancestors, depth + 1, maxDepth);
+        const nestedErrors = validateInternal(value, ancestors, depth + 1, maxDepth, deferred);
         if (nestedErrors.length > 0) {
           propertyErrors.children = nestedErrors;
         }
       }
 
-      if (Object.keys(propertyErrors.constraints).length > 0 || propertyErrors.children) {
+      // `awaited` entries are kept provisionally: their verdict is not known yet, and
+      // pruneErrors() drops the ones that turn out to be clean.
+      if (awaited || Object.keys(propertyErrors.constraints).length > 0 || propertyErrors.children) {
         errors.push(propertyErrors);
       }
     }
@@ -614,11 +762,29 @@ function deserializeContext(options?: TransformOptions): DeserializeContext {
 
 /**
  * Validates a class instance or object against its decorators.
+ *
  * @param obj The object to validate
+ * @param options Per-call options (currently `maxDepth`)
  * @returns Array of validation errors
  */
 export async function validate(obj: any, options?: TransformOptions): Promise<ValidationError[]> {
-  return validateInternal(obj, new Set(), 0, resolveOptions(options).maxDepth);
+  const deferred: Deferred = [];
+  const errors = validateInternal(obj, new Set(), 0, resolveOptions(options).maxDepth, deferred);
+  if (deferred.length === 0) return errors;
+  await settle(deferred);
+  return pruneErrors(errors);
+}
+
+/**
+ * Synchronous {@link validate}.
+ *
+ * @throws JsonMappingError if any validator returns a Promise.
+ */
+export function validateSync(obj: any, options?: TransformOptions): ValidationError[] {
+  const deferred: Deferred = [];
+  const errors = validateInternal(obj, new Set(), 0, resolveOptions(options).maxDepth, deferred);
+  refuseAsync(deferred, 'validateSync()', 'validate()');
+  return errors;
 }
 
 /**
@@ -627,8 +793,16 @@ export async function validate(obj: any, options?: TransformOptions): Promise<Va
  * The counterpart to {@link validate} for callers who want an exception rather than an
  * array they have to remember to check.
  */
-export async function validateOrReject(obj: any): Promise<void> {
-  const errors = await validate(obj);
+export async function validateOrReject(obj: any, options?: TransformOptions): Promise<void> {
+  const errors = await validate(obj, options);
+  if (errors.length > 0) {
+    throw new JsonValidationError('Validation failed', errors);
+  }
+}
+
+/** Synchronous {@link validateOrReject}. */
+export function validateOrRejectSync(obj: any, options?: TransformOptions): void {
+  const errors = validateSync(obj, options);
   if (errors.length > 0) {
     throw new JsonValidationError('Validation failed', errors);
   }
@@ -654,7 +828,31 @@ export async function toPlain<T>(obj: T, options?: TransformOptions): Promise<an
     }
   }
 
-  return serialize(obj, new Set(), serializeContext(options), 0);
+  const deferred: Deferred = [];
+  const plain = serialize(obj, new Set(), serializeContext(options), 0, deferred);
+  await settle(deferred);
+  return plain;
+}
+
+/**
+ * Synchronous {@link toPlain}.
+ *
+ * @throws JsonMappingError if any serializer or validator returns a Promise.
+ */
+export function toPlainSync<T>(obj: T, options?: TransformOptions): any {
+  if (obj === null || obj === undefined) return obj;
+
+  if (resolveOptions(options).validate) {
+    const errors = validateSync(obj, options);
+    if (errors.length > 0) {
+      throw new JsonValidationError('Validation failed during serialization', errors);
+    }
+  }
+
+  const deferred: Deferred = [];
+  const plain = serialize(obj, new Set(), serializeContext(options), 0, deferred);
+  refuseAsync(deferred, 'toPlainSync()', 'toPlain()');
+  return plain;
 }
 
 /**
@@ -664,8 +862,12 @@ export async function toPlain<T>(obj: T, options?: TransformOptions): Promise<an
  * @returns JSON string
  */
 export async function toJson<T>(obj: T, options?: TransformOptions): Promise<string> {
-  const plain = await toPlain(obj, options);
-  return JSON.stringify(plain);
+  return JSON.stringify(await toPlain(obj, options));
+}
+
+/** Synchronous {@link toJson}. */
+export function toJsonSync<T>(obj: T, options?: TransformOptions): string {
+  return JSON.stringify(toPlainSync(obj, options));
 }
 
 /**
@@ -680,7 +882,9 @@ export async function toJson<T>(obj: T, options?: TransformOptions): Promise<str
  * @returns Class instance
  */
 export async function toInstance<T>(clazz: ClassConstructor<T>, plain: any, options?: TransformOptions): Promise<T> {
-  const instance = await deserialize(clazz, plain, deserializeContext(options), 0);
+  const deferred: Deferred = [];
+  const instance = deserialize(clazz, plain, deserializeContext(options), 0, deferred);
+  await settle(deferred);
 
   if (resolveOptions(options).validate) {
     const errors = await validate(instance, options);
@@ -690,6 +894,32 @@ export async function toInstance<T>(clazz: ClassConstructor<T>, plain: any, opti
   }
 
   return instance;
+}
+
+/**
+ * Synchronous {@link toInstance}.
+ *
+ * @throws JsonMappingError if any deserializer or validator returns a Promise.
+ */
+export function toInstanceSync<T>(clazz: ClassConstructor<T>, plain: any, options?: TransformOptions): T {
+  const deferred: Deferred = [];
+  const instance = deserialize(clazz, plain, deserializeContext(options), 0, deferred);
+  refuseAsync(deferred, 'toInstanceSync()', 'toInstance()');
+
+  if (resolveOptions(options).validate) {
+    const errors = validateSync(instance, options);
+    if (errors.length > 0) {
+      throw new JsonValidationError('Validation failed during deserialization', errors);
+    }
+  }
+
+  return instance;
+}
+
+function requireArray<T>(clazz: ClassConstructor<T>, plain: any): void {
+  if (!Array.isArray(plain)) {
+    throw new JsonMappingError(`Expected an array to map to ${clazz.name}[], received ${typeof plain}.`);
+  }
 }
 
 /**
@@ -708,10 +938,18 @@ export async function toInstanceArray<T>(
   plain: any[],
   options?: TransformOptions
 ): Promise<T[]> {
-  if (!Array.isArray(plain)) {
-    throw new JsonMappingError(`Expected an array to map to ${clazz.name}[], received ${typeof plain}.`);
-  }
+  requireArray(clazz, plain);
   return (await toInstance(clazz, plain, options)) as unknown as T[];
+}
+
+/** Synchronous {@link toInstanceArray}. */
+export function toInstanceArraySync<T>(
+  clazz: ClassConstructor<T>,
+  plain: any[],
+  options?: TransformOptions
+): T[] {
+  requireArray(clazz, plain);
+  return toInstanceSync(clazz, plain, options) as unknown as T[];
 }
 
 /**
@@ -723,6 +961,11 @@ export async function toInstanceArray<T>(
  */
 export async function fromJson<T>(clazz: ClassConstructor<T>, json: string, options?: TransformOptions): Promise<T> {
   return toInstance(clazz, parseJson(json), options);
+}
+
+/** Synchronous {@link fromJson}. */
+export function fromJsonSync<T>(clazz: ClassConstructor<T>, json: string, options?: TransformOptions): T {
+  return toInstanceSync(clazz, parseJson(json), options);
 }
 
 /**
@@ -740,6 +983,15 @@ export async function fromJsonArray<T>(
   return toInstanceArray(clazz, parseJson(json), options);
 }
 
+/** Synchronous {@link fromJsonArray}. */
+export function fromJsonArraySync<T>(
+  clazz: ClassConstructor<T>,
+  json: string,
+  options?: TransformOptions
+): T[] {
+  return toInstanceArraySync(clazz, parseJson(json), options);
+}
+
 function parseJson(json: string): any {
   try {
     return JSON.parse(json);
@@ -753,6 +1005,9 @@ function parseJson(json: string): any {
 /**
  * Helper for Fetch-based frameworks (Next.js, Hono, etc.)
  * Extracts JSON from a Request and transforms it to a class instance.
+ *
+ * There is no synchronous counterpart: reading a Request body is inherently asynchronous.
+ *
  * @param clazz The class constructor
  * @param request Web Request object
  * @param options Per-call transform options
