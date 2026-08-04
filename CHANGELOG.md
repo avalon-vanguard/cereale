@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+**Synchronous API.** `validateSync`, `validateOrRejectSync`, `toPlainSync`, `toJsonSync`,
+`toInstanceSync`, `toInstanceArraySync`, `fromJsonSync` and `fromJsonArraySync`. Nothing on
+the default path is genuinely asynchronous — only a user-supplied serializer, deserializer or
+validator can be — so requiring `await` everywhere was a tax on the common case.
+
+The engines are now written synchronously, and anything a hook makes asynchronous is recorded
+and reconciled once at the end. There is no second copy of the traversal logic to keep in
+step, and the async entry points stop paying for a microtask per property. If a hook does
+return a Promise, the `*Sync` call raises a `JsonMappingError` naming the async alternative
+rather than silently returning a half-built object.
+
+`fromRequest` has no synchronous counterpart, because reading a request body is inherently
+asynchronous.
+
+- `maxDepth` option (default 64) on every mapping function and on `configure()`. All three
+  engines recurse, so a hostile payload nested thousands of levels deep could exhaust the
+  call stack; it now raises a `JsonMappingError`. Cycles were already handled, but legitimate
+  deep nesting was not bounded.
+- `validate(obj, options?)` accepts options, so `maxDepth` applies to standalone validation.
+- `REDACTED` export, the placeholder substituted for withheld values.
+
+### Security
+
+- **Validation errors no longer carry the value of a property that is never serialized.**
+  A `@JsonWriteOnly` password that failed `@MinLength` put the rejected password into
+  `ValidationError.value`, and from there into any log that recorded the error. Values for
+  `@JsonWriteOnly` and `@JsonIgnore` properties are replaced with `REDACTED`; the property
+  name and the failure message are unchanged, so the error is still actionable.
+
 ### Performance
 
 Profiling the validator showed roughly **half of all validation time** was spent re-deriving
@@ -21,25 +52,17 @@ plan, and serializer/deserializer instances (previously constructed fresh for ev
 of every object). `MetadataStorage` carries a version counter that invalidates every cache
 if metadata is registered late, so `registerDecorator` after first use still works.
 
-Measured on a customer record with nested address and orders, against `JSON.parse` +
-`JSON.stringify` as a fixed reference point:
+Together with the synchronous core, measured on a customer record with a nested address and
+orders, against `JSON.parse` + `JSON.stringify` (5.8 us) as a fixed reference point:
 
-| Operation | Before | After | Speedup |
+| Operation | 0.1.0 | Now | Speedup |
 | --- | --- | --- | --- |
-| `validate` (50 orders) | 221.6 us | 49.6 us | 4.5x |
-| `validate` (10 orders) | 47.8 us | 12.9 us | 3.7x |
-| `toInstance` (50 orders) | 255.1 us | 74.0 us | 3.4x |
-| `toInstance` (10 orders) | 64.6 us | 19.0 us | 3.4x |
-| `toPlain` (50 orders) | 294.4 us | 95.3 us | 3.1x |
-| `toInstance` (single) | 19.8 us | 8.4 us | 2.4x |
-
-### Added
-
-- `maxDepth` option (default 64) on every mapping function and on `configure()`. All three
-  engines recurse, so a hostile payload nested thousands of levels deep could exhaust the
-  call stack; it now raises a `JsonMappingError`. Cycles were already handled, but legitimate
-  deep nesting was not bounded.
-- `validate(obj, options?)` accepts options, so `maxDepth` applies to standalone validation.
+| `validate` (50 orders) | 221.6 us | 17.8 us | 12.4x |
+| `validate` (10 orders) | 47.8 us | 4.5 us | 10.6x |
+| `toPlain` (50 orders) | 294.4 us | 36.0 us | 8.2x |
+| `toInstance` (50 orders) | 255.1 us | 31.7 us | 8.0x |
+| `toInstance` (10 orders) | 64.6 us | 8.2 us | 7.9x |
+| `toInstance` (single) | 19.8 us | 5.2 us | 3.8x |
 
 ### Changed
 
