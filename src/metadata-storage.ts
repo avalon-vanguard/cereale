@@ -64,6 +64,29 @@ export class MetadataStorage {
   }
 
   /**
+   * Collects a metadata value from every level of the prototype chain that defines one.
+   *
+   * Unlike {@link getMetadata}, which stops at the first (most derived) match, this returns
+   * every value found, ordered from the BASE class down to the most derived one. It exists
+   * for metadata that must accumulate across an inheritance chain rather than be overridden —
+   * validation constraints in particular, where a subclass re-decorating an inherited property
+   * must add to the base class's rules instead of silently replacing them.
+   */
+  getMetadataChain(key: string, target: any, propertyKey?: string): any[] {
+    const chain: any[] = [];
+    let current = target;
+    while (current) {
+      const value = this.getOwnMetadata(key, current, propertyKey);
+      if (value !== undefined) {
+        // Walking derived -> base, so prepend to end up base-first.
+        chain.unshift(value);
+      }
+      current = Object.getPrototypeOf(current);
+    }
+    return chain;
+  }
+
+  /**
    * Gets metadata defined directly on the target.
    */
   getOwnMetadata(key: string, target: any, propertyKey?: string): any {

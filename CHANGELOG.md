@@ -1,0 +1,118 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.1.0] - 2026-08-03
+
+The first release with a working test suite. Everything below the "Fixed" heading was
+found by writing tests against the previous release; the suite has grown from 40 tests
+that never executed to 136 that do.
+
+### Added
+
+**Field-name mapping.** A library whose headline feature is "JSON mapping" could not map
+a name. It can now.
+
+- `@JsonProperty(name)` renames a property in both directions.
+- `@JsonAlias(...names)` accepts extra names on input only, so a field can be renamed
+  without breaking older clients.
+- Naming strategies — `snake_case`, `kebab-case`, `SCREAMING_SNAKE_CASE`, `PascalCase`,
+  `camelCase`, or your own function — applied to properties with no explicit name.
+  Acronyms split where a reader expects: `parseHTTPResponse` → `parse_http_response`.
+
+**Access control.**
+
+- `@JsonIgnore()` — excluded in both directions.
+- `@JsonWriteOnly()` — accepted from input, never echoed back (passwords).
+- `@JsonReadOnly()` — serialized, never settable by a client (server-owned ids).
+
+**Transform options**, per call or globally via `configure()`.
+
+- `validate: false` maps without validating, for lenient parsing.
+- `unknownKeys: 'allow' | 'strip' | 'error'` decides what happens to undeclared keys.
+- `namingStrategy` selects the JSON naming convention.
+
+**Error ergonomics.** Turning the nested `ValidationError` tree into an HTTP 400 body used
+to be the caller's problem.
+
+- `flattenErrors(errors)` → `{ "items[0].qty": ["qty must be at least 1"] }`
+- `formatErrors(errors)` → one human-readable line per failure
+- `collectErrorMessages(errors)` → just the messages
+- `validateOrReject(obj)` throws instead of returning an array you might forget to check
+
+**30 validation decorators.** `@Equals`, `@NotEquals`, `@IsEmpty`, `@IsEnum`, `@IsInstance`,
+`@Length`, `@IsAlpha`, `@IsAlphanumeric`, `@IsNumberString`, `@IsLowercase`, `@IsUppercase`,
+`@Contains`, `@NotContains`, `@StartsWith`, `@EndsWith`, `@IsUUID`, `@IsJSON`,
+`@IsDateString`, `@IsSemVer`, `@IsHexColor`, `@IsIP`, `@IsDivisibleBy`, `@IsPort`,
+`@IsLatitude`, `@IsLongitude`, `@IsBigInt`, `@MinDate`, `@MaxDate`, `@ArrayUnique`,
+`@ArrayContains`, `@ArrayNotContains`.
+
+**Conditional validation.** `@ValidateIf(o => ...)` makes a property's rules depend on the
+rest of the object; `@Allow()` declares a property that needs no rules of its own.
+
+**Correctly typed array entry points.** `toInstanceArray()` and `fromJsonArray()`.
+`toInstance`/`fromJson` accept arrays at runtime but type the result as `T`, so callers had
+to cast to reach the elements.
+
+**`@JsonPolymorphic` options.** `{ onUnknown: 'error' }` and `{ fallback: SomeClass }`.
+
+**`JsonMappingError`** — raised when a value cannot be mapped at all, as distinct from
+mapping fine and failing validation.
+
+### Fixed
+
+- **Inheritance silently discarded base-class rules.** A subclass re-decorating an inherited
+  property registered its constraints against its own prototype, and the engine read only the
+  nearest set. Constraints now merge down the whole prototype chain, base first. The
+  library's own example was affected: `Media`'s `@IsString() title` had never been enforced
+  for `Book`.
+- **A circular reference exhausted the heap.** `serialize()` recursed forever, taking 8 GB
+  and the process with it. It now raises a `JsonMappingError` naming the cause. Diamonds
+  still serialize; `validate()` skips back-edges.
+- **`@Matches` with a `g` or `y` flag was stateful.** `RegExp.test` advances `lastIndex`, so
+  validating the same value twice gave different answers. Those flags are stripped.
+- **An unmatched `@JsonPolymorphic` discriminator silently dropped the value.** The
+  single-object branch fell through without assigning; the property came back `undefined`.
+  The raw value is now preserved.
+- **`@JsonSerialize` serializers ran on `null`/`undefined`**, crashing on any unset optional
+  property. They now only see real values.
+- **`serialize()` crashed on null-prototype objects.** It read `obj.constructor.prototype`;
+  both engines now agree on `Object.getPrototypeOf`.
+- **`__proto__`, `constructor` and `prototype` in untrusted JSON** were copied onto the
+  instance, detaching it from its own class. They are dropped.
+- **Caller-supplied messages were mangled** by the `each element in ...` prefix, producing
+  sentences like "each element in tags must all be strings".
+- **Two rules sharing a name overwrote each other**, so only one failure was ever reported.
+- **`fromRequest` leaked a raw `SyntaxError`** for a non-JSON body; it now reports a
+  `JsonMappingError`.
+- **`@ValidateNested({ each: true })`** was documented in the README but did not compile —
+  `ValidateNested()` accepted no arguments. It now does, and asserts the value is an array.
+
+### Changed
+
+- `toPlain`, `toJson`, `toInstance`, `fromJson`, `fromJsonArray`, `toInstanceArray` and
+  `fromRequest` accept an optional trailing options argument. All defaults preserve the
+  previous behaviour.
+- `src/example.ts` is no longer published in `dist`. It called `runExample()` at import
+  time — an import side effect in a package declaring `"sideEffects": false`.
+- Minimum supported Node is 20.
+
+### Infrastructure
+
+- **The test suite had never run.** Vitest 4 transpiles with oxc, which does not read
+  `experimentalDecorators` from a tsconfig that excludes the files it is transforming, so
+  every decorator-using suite failed to parse and was reported as "0 test" rather than as an
+  error. A `vitest.config.ts` enabling legacy decorators brought all 40 existing tests back
+  to life.
+- Test files are now type-checked, which surfaced 17 strict-mode errors.
+- CI runs lint, coverage tests, build and ESM/CJS entry-point smoke checks across Node
+  20/22/24, and `npm ci` works because `package-lock.json` is committed.
+- `npm run build:docs` regenerates the previously hand-maintained `docs/cereale.js`.
+
+## [0.0.1]
+
+Initial release: mapping and validation decorators, polymorphic types, custom
+serializers/deserializers, and the `toJson` / `fromJson` / `toPlain` / `toInstance` API.

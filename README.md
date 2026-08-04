@@ -4,10 +4,12 @@ Cereale is a lightweight TypeScript library that provides Spring-like decorators
 
 ## Features
 
-- **Spring-like Decorators:** Familiar `@JsonSerialize`, `@JsonDeserialize`, `@JsonType`, and `@JsonPolymorphic`.
+- **Spring-like Decorators:** Familiar `@JsonProperty`, `@JsonSerialize`, `@JsonDeserialize`, `@JsonType`, and `@JsonPolymorphic`.
+- **Field-name Mapping:** Map `first_name` to `firstName` per property or with a naming strategy.
+- **Access Control:** Keep passwords out of responses and server-owned ids out of requests.
 - **Custom Serializers/Deserializers:** Easily handle complex types like Dates, BigInts, or custom objects.
 - **Polymorphism Support:** Native handling of polymorphic types via discriminators.
-- **Integrated Validation:** Automatically validates objects during serialization and deserialization.
+- **Integrated Validation:** 50+ validation decorators, applied during mapping or on demand.
 - **Type Safety:** Fully written in TypeScript for excellent developer experience.
 - **Zero Dependencies:** Extremely lightweight and fast.
 
@@ -17,42 +19,40 @@ Cereale is a lightweight TypeScript library that provides Spring-like decorators
 npm install cereale
 ```
 
-Make sure to enable `experimentalDecorators` and `emitDecoratorMetadata` in your `tsconfig.json`:
+Enable `experimentalDecorators` in your `tsconfig.json`:
 
 ```json
 {
   "compilerOptions": {
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "target": "ES2025"
+    "target": "ES2022"
   }
 }
 ```
+
+Cereale stores its own metadata, so `reflect-metadata` is not required and
+`emitDecoratorMetadata` is not read. Requires Node 20 or later.
 
 ## Quick Start
 
 ### 1. Define your Models
 
-Use decorators to define how your data should be transformed and validated.
-
 ```typescript
-import { 
-  IsString, 
-  IsInt, 
-  Min, 
-  IsDate, 
+import {
+  IsString,
+  IsDate,
   ValidateNested,
-  JsonSerialize, 
-  JsonDeserialize, 
-  JsonPolymorphic, 
-  JsonSerializer, 
-  JsonDeserializer 
+  JsonSerialize,
+  JsonDeserialize,
+  JsonPolymorphic,
+  JsonSerializer,
+  JsonDeserializer
 } from 'cereale';
 
 // Custom Date Serializer
 class DateSerializer implements JsonSerializer<Date, string> {
   serialize(value: Date): string {
-    return value.toISOString().split('T')[0];
+    return value.toISOString().split('T')[0]!;
   }
 }
 
@@ -72,7 +72,7 @@ abstract class Media {
 
 class Book extends Media {
   type = 'book';
-  
+
   @IsString()
   author: string;
 
@@ -94,12 +94,13 @@ class Library {
 }
 ```
 
+Constraints accumulate down an inheritance chain: `Book` is checked against `Media`'s
+`@IsString() title` as well as its own rules.
+
 ### 2. Map JSON with Validation
 
-Use standalone utility functions to handle the conversion process directly.
-
 ```typescript
-import { fromJson, toJson, JsonValidationError } from 'cereale';
+import { fromJson, toJson, JsonValidationError, flattenErrors } from 'cereale';
 
 async function main() {
   const json = '{"name": "Central Library", "items": [{"type": "book", "title": "The Great Gatsby", "author": "F. Scott Fitzgerald", "publishedAt": "1925-04-10"}]}';
@@ -107,15 +108,15 @@ async function main() {
   try {
     // Deserialize JSON to Class Instance
     const library = await fromJson(Library, json);
-    console.log(library.name); // "Central Library"
+    console.log(library.name);                     // "Central Library"
     console.log(library.items[0] instanceof Book); // true
 
     // Serialize Class Instance back to JSON
-    const outputJson = await toJson(library);
-    console.log(outputJson);
+    console.log(await toJson(library));
   } catch (error) {
     if (error instanceof JsonValidationError) {
-      console.error("Validation failed:", error.errors);
+      console.error(flattenErrors(error.errors));
+      // { "items[0].title": ["title must be a string"] }
     }
   }
 }
@@ -135,20 +136,102 @@ app.post('/books', async (c) => {
 });
 ```
 
+## Field-name Mapping
+
+JSON rarely uses the same names as your classes.
+
+```typescript
+import { JsonProperty, JsonAlias } from 'cereale';
+
+class User {
+  @JsonProperty('first_name')
+  firstName: string;        // <-> {"first_name": "Ada"}
+
+  @JsonProperty('surname')
+  @JsonAlias('last_name')   // also accepted on input, never emitted
+  lastName: string;
+}
+```
+
+Or convert every property at once with a naming strategy:
+
+```typescript
+import { configure, toPlain } from 'cereale';
+
+// once, for the whole application
+configure({ namingStrategy: 'snake_case' });
+
+// or per call
+await toPlain(user, { namingStrategy: 'snake_case' });
+```
+
+Built-in strategies: `identity` (default), `camelCase`, `PascalCase`, `snake_case`,
+`SCREAMING_SNAKE_CASE`, `kebab-case`. You can also pass your own
+`(propertyKey: string) => string`. An explicit `@JsonProperty` always wins.
+
+Acronyms split where a reader expects them to: `parseHTTPResponse` becomes
+`parse_http_response`, not `parse_h_t_t_p_response`.
+
+## Access Control
+
+```typescript
+import { JsonIgnore, JsonReadOnly, JsonWriteOnly } from 'cereale';
+
+class Account {
+  @JsonReadOnly()      // sent to clients, never settable by them
+  id: number;
+
+  @IsString()
+  email: string;
+
+  @JsonWriteOnly()     // accepted from clients, never echoed back
+  @IsString()
+  password: string;
+
+  @JsonIgnore()        // never crosses the boundary in either direction
+  internalNotes: string;
+}
+```
+
+## Options
+
+Every mapping function takes an optional trailing options argument, and `configure()` sets
+defaults for the whole application. Per-call options win.
+
+| Option | Values | Default | Meaning |
+| --- | --- | --- | --- |
+| `validate` | `boolean` | `true` | Validate the result; throw `JsonValidationError` on failure. |
+| `namingStrategy` | strategy name or function | `identity` | JSON naming convention for properties without `@JsonProperty`. |
+| `unknownKeys` | `allow` \| `strip` \| `error` | `allow` | What to do with incoming keys matching no declared property. |
+
+```typescript
+// lenient parse: build the instance, inspect the damage yourself
+const draft = await fromJson(Order, body, { validate: false });
+const problems = flattenErrors(await validate(draft));
+
+// strict intake: reject anything you did not declare
+const order = await fromJson(Order, body, { unknownKeys: 'error' });
+```
+
 ## API Reference
 
-### Decorators
+### Mapping Decorators
 
-- `@JsonSerialize(serializer: ClassConstructor<JsonSerializer>)`: Specifies a custom serializer for a property.
-- `@JsonDeserialize(deserializer: ClassConstructor<JsonDeserializer>)`: Specifies a custom deserializer for a property.
-- `@JsonType(typeFunction: () => ClassConstructor<any>)`: Explicitly sets the type for nested transformations.
-- `@JsonPolymorphic(discriminator: string, subTypes: { value: ClassConstructor<any>, name: string }[])`: Configures polymorphic transformation based on a discriminator field.
+- `@JsonProperty(name: string)`: Renames the property in JSON, both directions.
+- `@JsonAlias(...names: string[])`: Extra names accepted on input only.
+- `@JsonIgnore()`: Excludes the property from mapping entirely.
+- `@JsonReadOnly()`: Serialized, but never populated from incoming JSON.
+- `@JsonWriteOnly()`: Populated from incoming JSON, but never serialized.
+- `@JsonSerialize(serializer: ClassConstructor<JsonSerializer>)`: Custom serializer for a property. Skipped when the value is `null`/`undefined`.
+- `@JsonDeserialize(deserializer: ClassConstructor<JsonDeserializer>)`: Custom deserializer for a property.
+- `@JsonType(typeFunction: () => ClassConstructor<any>)`: Explicitly sets the type for nested transformations. Applies element-wise to arrays.
+- `@JsonPolymorphic(discriminator, subTypes, options?)`: Polymorphic transformation based on a discriminator field. `options` accepts `{ onUnknown: 'keep' | 'error' }` (default `keep`, which preserves the raw value) and `{ fallback: ClassConstructor }`.
 
-#### Validation Decorators
+### Validation Decorators
 
 Most validation decorators accept an optional `ValidationOptions` object:
 - `each: boolean`: Apply validation to each element of an array.
-- `message: string | ((args: ValidationArguments) => string)`: Custom error message.
+- `message: string | ((args: ValidationArguments) => string)`: Custom error message, reported verbatim.
 
 | Decorator | Description |
 | --- | --- |
@@ -156,46 +239,88 @@ Most validation decorators accept an optional `ValidationOptions` object:
 | `@IsNumber()` | Checks if value is a number (and not NaN). |
 | `@IsInt()` | Checks if value is an integer. |
 | `@IsBoolean()` | Checks if value is a boolean. |
+| `@IsBigInt()` | Checks if value is a bigint. |
 | `@IsObject()` | Checks if value is an object (not null/array). |
 | `@IsDate()` | Checks if value is a valid Date object. |
 | `@IsDefined()` | Checks if value is not null or undefined. |
 | `@IsOptional()` | Skips other validations if value is null/undefined. |
 | `@IsNotEmpty()` | Checks if value is not null/undefined/empty string. |
-| `@Min(value)` | Checks if number is >= value. |
-| `@Max(value)` | Checks if number is <= value. |
-| `@Positive()` | Checks if number is > 0. |
-| `@Negative()` | Checks if number is < 0. |
-| `@MinLength(len)` | Checks if string length is >= len. |
-| `@MaxLength(len)` | Checks if string length is <= len. |
+| `@IsEmpty()` | Checks if value is null/undefined/`''`/`[]`/`{}`. |
+| `@Equals(value)` / `@NotEquals(value)` | Strict equality against a fixed value. |
+| `@IsEnum(enumObject)` | Checks membership of a TypeScript enum. |
+| `@IsInstance(Class)` | Checks `value instanceof Class`. |
+| `@Min(value)` / `@Max(value)` | Numeric bounds. |
+| `@Positive()` / `@Negative()` | Checks sign. |
+| `@IsDivisibleBy(n)` | Checks `value % n === 0`. |
+| `@IsPort()` | Integer in 0–65535, as number or numeric string. |
+| `@IsLatitude()` / `@IsLongitude()` | Geographic bounds. |
+| `@MinLength(len)` / `@MaxLength(len)` | String length bounds. |
+| `@Length(min, max?)` | Both bounds in one rule. |
+| `@IsAlpha()` / `@IsAlphanumeric()` | Character-class checks. |
+| `@IsLowercase()` / `@IsUppercase()` | Case checks. |
+| `@IsNumberString()` | String that parses as a finite number. |
+| `@Contains(s)` / `@NotContains(s)` | Substring checks. |
+| `@StartsWith(s)` / `@EndsWith(s)` | Affix checks. |
 | `@Email()` | Checks if string is a valid email. |
 | `@IsUrl()` | Checks if string is a valid URL. |
-| `@Matches(regex)`| Checks if string matches a regular expression. |
+| `@IsUUID(version?)` | Checks if string is a valid UUID. |
+| `@IsIP(version?)` | Checks if string is a valid IPv4/IPv6 address. |
+| `@IsJSON()` | Checks if string parses as JSON. |
+| `@IsDateString()` | Checks if string is a parseable date. |
+| `@IsSemVer()` | Checks if string is a semantic version. |
+| `@IsHexColor()` | Checks `#rgb`, `#rrggbb`, `#rrggbbaa`. |
+| `@Matches(regex)` | Checks if string matches a regular expression. |
+| `@MinDate(d)` / `@MaxDate(d)` | Date bounds. Accepts `() => Date` for a moving bound. |
 | `@IsArray()` | Checks if value is an array. |
-| `@ArrayNotEmpty()`| Checks if array is not empty. |
-| `@ArrayMinSize(n)`| Checks if array has at least n elements. |
-| `@ArrayMaxSize(n)`| Checks if array has at most n elements. |
-| `@IsIn(values)` | Checks if value is in the allowed list. |
-| `@IsNotIn(vals)` | Checks if value is NOT in the list. |
-| `@ValidateNested()`| Recursively validates nested objects/arrays. |
+| `@ArrayNotEmpty()` | Checks if array is not empty. |
+| `@ArrayMinSize(n)` / `@ArrayMaxSize(n)` | Array size bounds. |
+| `@ArrayUnique(keyFn?)` | Checks for duplicate elements. |
+| `@ArrayContains(vals)` / `@ArrayNotContains(vals)` | Membership checks. |
+| `@IsIn(values)` / `@IsNotIn(values)` | Allow/deny lists. |
+| `@ValidateNested(options?)` | Recursively validates nested objects/arrays. |
+| `@ValidateIf(o => boolean)` | Skips this property's rules when the condition is false. |
+| `@Allow()` | Declares a property with no rules of its own. |
+| `@Validate(validator, constraints?, options?)` | Applies a custom validator class or function. |
+
+Write your own with `registerDecorator({ name, target, propertyName, validator })`.
 
 ### Utilities
 
-- `toJson(obj: any)`: Validates and serializes an instance to a JSON string (Returns `Promise<string>`).
-- `toPlain(obj: any)`: Validates and transforms an instance to a plain object (Returns `Promise<any>`).
-- `fromJson(clazz: ClassConstructor, json: string)`: Parses JSON and transforms it to a validated class instance (Returns `Promise<T>`).
-- `toInstance(clazz: ClassConstructor, plain: any)`: Transforms a plain object to a validated class instance (Returns `Promise<T>`).
-- `fromRequest(clazz: ClassConstructor, request: Request)`: Extracts JSON from a Fetch `Request` and transforms it to a validated instance (Returns `Promise<T>`).
-- `validate(obj: any)`: Performs full validation on an object/instance (Returns `Promise<ValidationError[]>`).
+- `toJson(obj, options?)`: Validates and serializes an instance to a JSON string (`Promise<string>`).
+- `toPlain(obj, options?)`: Validates and transforms an instance to a plain object (`Promise<any>`).
+- `fromJson(clazz, json, options?)`: Parses JSON to a validated class instance (`Promise<T>`).
+- `fromJsonArray(clazz, json, options?)`: Same, for a JSON array (`Promise<T[]>`).
+- `toInstance(clazz, plain, options?)`: Transforms a plain object to a validated class instance (`Promise<T>`).
+- `toInstanceArray(clazz, plain, options?)`: Same, for an array (`Promise<T[]>`).
+- `fromRequest(clazz, request, options?)`: Extracts JSON from a Fetch `Request` (`Promise<T>`).
+- `validate(obj)`: Full validation, returning `Promise<ValidationError[]>`.
+- `validateOrReject(obj)`: As above, but throws `JsonValidationError`.
+- `configure(options)` / `getConfig()` / `resetConfig()`: Library-wide defaults.
+
+### Error Handling
+
+`JsonValidationError` carries a nested `ValidationError[]`. Three helpers turn it into
+something you can return to a client:
+
+```typescript
+import { flattenErrors, formatErrors, collectErrorMessages } from 'cereale';
+
+flattenErrors(errors);        // { "items[0].qty": ["qty must be at least 1"] }
+formatErrors(errors);         // "items[0].qty: qty must be at least 1"
+collectErrorMessages(errors); // ["qty must be at least 1"]
+```
+
+`JsonMappingError` is raised when a value cannot be mapped at all — a body that is not
+JSON, a circular reference, an unknown discriminator under `{ onUnknown: 'error' }` — as
+distinct from mapping fine and failing validation.
 
 ## Framework Integrations
-
-Cereale is designed to be compatible with all trending web frameworks.
 
 ### Hono / Next.js / Cloudflare Workers
 Use `fromRequest` for seamless integration with the Fetch `Request` API.
 
 ### NestJS
-You can use Cereale inside your controllers for explicit mapping and validation without needing `reflect-metadata`.
+Use Cereale inside your controllers for explicit mapping and validation without needing `reflect-metadata`.
 
 ```typescript
 import { toInstance } from 'cereale';
@@ -208,20 +333,32 @@ async create(@Body() body: any) {
 ```
 
 ### Express / Fastify
-Easily integrate with traditional Node.js frameworks.
 
 ```typescript
-import { toInstance, toPlain } from 'cereale';
+import { toInstance, toPlain, JsonValidationError, flattenErrors } from 'cereale';
 
 app.post('/user', async (req, res) => {
   try {
     const user = await toInstance(User, req.body);
     res.json(await toPlain(user));
   } catch (err) {
-    res.status(400).json(err);
+    if (err instanceof JsonValidationError) {
+      return res.status(400).json({ errors: flattenErrors(err.errors) });
+    }
+    throw err;
   }
 });
 ```
+
+## Notes and Limitations
+
+- **Circular references** are rejected during serialization with a `JsonMappingError`. Break
+  the cycle with `@JsonIgnore()` on the back-reference.
+- **`validate()` on a plain object** returns no errors: rules live on the class, so validate
+  the instance you get back from `toInstance`, not the raw payload.
+- **Renaming is not backwards-compatible by itself.** Once a property carries
+  `@JsonProperty`, its original name is no longer accepted on input — add `@JsonAlias` to
+  keep older clients working.
 
 ## Contributing
 
