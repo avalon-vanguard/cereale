@@ -5,6 +5,49 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Performance
+
+Profiling the validator showed roughly **half of all validation time** was spent re-deriving
+answers that cannot change: `collectConstraints` (22%), `getOwnMetadata` (12%),
+`getMetadataChain` (9%), `getProperties` (4%) and `getMetadata` (3%), plus 8% garbage
+collection from the allocation churn. The constraint predicates themselves accounted for
+under 1%.
+
+Decorator metadata is fixed once classes are declared, so the derived structures are now
+memoized per prototype — the validation plan, the serialization plan, the deserialization
+plan, and serializer/deserializer instances (previously constructed fresh for every property
+of every object). `MetadataStorage` carries a version counter that invalidates every cache
+if metadata is registered late, so `registerDecorator` after first use still works.
+
+Measured on a customer record with nested address and orders, against `JSON.parse` +
+`JSON.stringify` as a fixed reference point:
+
+| Operation | Before | After | Speedup |
+| --- | --- | --- | --- |
+| `validate` (50 orders) | 221.6 us | 49.6 us | 4.5x |
+| `validate` (10 orders) | 47.8 us | 12.9 us | 3.7x |
+| `toInstance` (50 orders) | 255.1 us | 74.0 us | 3.4x |
+| `toInstance` (10 orders) | 64.6 us | 19.0 us | 3.4x |
+| `toPlain` (50 orders) | 294.4 us | 95.3 us | 3.1x |
+| `toInstance` (single) | 19.8 us | 8.4 us | 2.4x |
+
+### Added
+
+- `maxDepth` option (default 64) on every mapping function and on `configure()`. All three
+  engines recurse, so a hostile payload nested thousands of levels deep could exhaust the
+  call stack; it now raises a `JsonMappingError`. Cycles were already handled, but legitimate
+  deep nesting was not bounded.
+- `validate(obj, options?)` accepts options, so `maxDepth` applies to standalone validation.
+
+### Changed
+
+- `each: true` failures now report which element failed — `"... (failed at index 3)"`. A bad
+  entry in a 200-item array previously produced a message that could not locate it. A message
+  function now receives the failing element as `args.value` rather than the whole array;
+  caller-supplied string messages are still reported verbatim.
+
 ## [0.1.0] - 2026-08-03
 
 The first release with a working test suite. Everything below the "Fixed" heading was

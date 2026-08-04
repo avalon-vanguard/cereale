@@ -203,6 +203,7 @@ defaults for the whole application. Per-call options win.
 | `validate` | `boolean` | `true` | Validate the result; throw `JsonValidationError` on failure. |
 | `namingStrategy` | strategy name or function | `identity` | JSON naming convention for properties without `@JsonProperty`. |
 | `unknownKeys` | `allow` \| `strip` \| `error` | `allow` | What to do with incoming keys matching no declared property. |
+| `maxDepth` | `number` | `64` | Nesting depth before a `JsonMappingError` is raised, bounding hostile payloads. |
 
 ```typescript
 // lenient parse: build the instance, inspect the damage yourself
@@ -293,7 +294,7 @@ Write your own with `registerDecorator({ name, target, propertyName, validator }
 - `toInstance(clazz, plain, options?)`: Transforms a plain object to a validated class instance (`Promise<T>`).
 - `toInstanceArray(clazz, plain, options?)`: Same, for an array (`Promise<T[]>`).
 - `fromRequest(clazz, request, options?)`: Extracts JSON from a Fetch `Request` (`Promise<T>`).
-- `validate(obj)`: Full validation, returning `Promise<ValidationError[]>`.
+- `validate(obj, options?)`: Full validation, returning `Promise<ValidationError[]>`.
 - `validateOrReject(obj)`: As above, but throws `JsonValidationError`.
 - `configure(options)` / `getConfig()` / `resetConfig()`: Library-wide defaults.
 
@@ -349,6 +350,26 @@ app.post('/user', async (req, res) => {
   }
 });
 ```
+
+## Performance
+
+Decorator metadata is fixed once your classes are declared, so cereale resolves each class's
+validation, serialization and deserialization plans once and memoizes them per prototype.
+A version counter invalidates the caches if metadata is registered late, so `registerDecorator`
+after first use still behaves correctly.
+
+Indicative throughput for a customer record with a nested address and 10 orders, measured
+against `JSON.parse` + `JSON.stringify` (5.9 us) on the same machine:
+
+| Operation | Time |
+| --- | --- |
+| `toInstance` (deserialize + validate) | ~19 us |
+| `toInstance` with `{ validate: false }` | ~6 us |
+| `validate` on an existing instance | ~13 us |
+| `toPlain` (validate + serialize) | ~23 us |
+
+If you validate at the edge and map internally afterwards, `{ validate: false }` skips the
+dominant cost.
 
 ## Notes and Limitations
 

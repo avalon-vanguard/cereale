@@ -27,15 +27,24 @@ export interface TransformOptions {
 
   /** What to do with incoming keys that match no declared property. Deserialization only. */
   unknownKeys?: UnknownKeyPolicy;
+
+  /**
+   * Maximum nesting depth before a {@link JsonMappingError} is raised. Defaults to 64.
+   *
+   * All three engines recurse, so a hostile payload nested thousands of levels deep would
+   * otherwise exhaust the call stack. Raise it if you legitimately model deep trees.
+   */
+  maxDepth?: number;
 }
 
 /** Options that can be set once for the whole application via {@link configure}. */
-export type GlobalOptions = Pick<TransformOptions, 'namingStrategy' | 'unknownKeys' | 'validate'>;
+export type GlobalOptions = Pick<TransformOptions, 'namingStrategy' | 'unknownKeys' | 'validate' | 'maxDepth'>;
 
 const DEFAULTS: Required<GlobalOptions> = {
   namingStrategy: 'identity',
   unknownKeys: 'allow',
   validate: true,
+  maxDepth: 64,
 };
 
 let globalOptions: Required<GlobalOptions> = { ...DEFAULTS };
@@ -71,5 +80,6 @@ export function resolveOptions(options?: TransformOptions): Required<GlobalOptio
     namingStrategy: options.namingStrategy ?? globalOptions.namingStrategy,
     unknownKeys: options.unknownKeys ?? globalOptions.unknownKeys,
     validate: options.validate ?? globalOptions.validate,
+    maxDepth: options.maxDepth ?? globalOptions.maxDepth,
   };
 }

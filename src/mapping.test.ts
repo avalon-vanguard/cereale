@@ -275,7 +275,12 @@ describe('configure()', () => {
   it('resetConfig() restores the defaults', async () => {
     configure({ namingStrategy: 'snake_case', unknownKeys: 'error', validate: false });
     resetConfig();
-    expect(getConfig()).toEqual({ namingStrategy: 'identity', unknownKeys: 'allow', validate: true });
+    expect(getConfig()).toEqual({
+      namingStrategy: 'identity',
+      unknownKeys: 'allow',
+      validate: true,
+      maxDepth: 64,
+    });
   });
 });
 
