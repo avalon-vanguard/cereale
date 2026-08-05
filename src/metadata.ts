@@ -1,11 +1,23 @@
 import type { ClassConstructor } from './interfaces.js';
 
-// TypeScript's standard-decorator emit reads `Symbol.metadata`. Node does not define it yet,
-// so it is installed here, before any decorated class in the consuming application is
-// evaluated. `Symbol.for` keeps it identical across duplicate copies of the library, which
-// the dual ESM/CJS build can otherwise produce.
-((Symbol as { metadata?: symbol }).metadata as symbol | undefined) ??=
-  Symbol.for('Symbol.metadata');
+/**
+ * The key decorator metadata is stored under.
+ *
+ * Resolved into a binding rather than read as `Symbol.metadata` at each use. If the well-known
+ * symbol is absent, `Symbol.metadata` evaluates to `undefined` and `clazz[undefined]` quietly
+ * reads a property literally named "undefined" — `modelOf` would return an empty model and
+ * every object would validate clean. Silent success is the worst failure mode a validation
+ * library can have, so the fallback is baked into the value the code actually uses.
+ *
+ * `Symbol.for` matches what the decorator transforms emit (esbuild's `__knownSymbol` uses the
+ * same fallback), and keeps the key identical across duplicate copies of the library, which
+ * the dual ESM/CJS build can otherwise produce.
+ */
+const METADATA_KEY: symbol = (Symbol as { metadata?: symbol }).metadata ?? Symbol.for('Symbol.metadata');
+
+// Also installed globally, because a consumer's own compiler emit may read `Symbol.metadata`
+// directly. package.json marks this module as having side effects so it survives bundling.
+((Symbol as { metadata?: symbol }).metadata as symbol | undefined) ??= METADATA_KEY;
 
 export interface ValidationArguments {
   value: any;
@@ -139,7 +151,7 @@ export function addConstraint(
 /** Reads the model declared on a class. Returns an empty model for undecorated classes. */
 export function modelOf(clazz: unknown): ClassModel {
   if (typeof clazz !== 'function') return {};
-  const metadata = (clazz as { [Symbol.metadata]?: DecoratorMetadata })[Symbol.metadata];
+  const metadata = (clazz as unknown as Record<symbol, DecoratorMetadata | undefined>)[METADATA_KEY];
   return (metadata as Record<symbol, ClassModel> | undefined)?.[MODEL] ?? {};
 }
 
@@ -168,7 +180,7 @@ export function defineRule<T>(
   constraint: ValidationConstraint,
   options?: ValidationOptions
 ): void {
-  const holder = clazz as unknown as { [Symbol.metadata]?: DecoratorMetadata };
-  holder[Symbol.metadata] ??= Object.create(null) as DecoratorMetadata;
-  addConstraint(holder[Symbol.metadata]!, property, constraint, options);
+  const holder = clazz as unknown as Record<symbol, DecoratorMetadata | undefined>;
+  holder[METADATA_KEY] ??= Object.create(null) as DecoratorMetadata;
+  addConstraint(holder[METADATA_KEY]!, property, constraint, options);
 }
