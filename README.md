@@ -25,6 +25,10 @@ const user = fromJsonSync(User, body);   // a real User
 user.greet();                            // your methods are still there
 ```
 
+`docs/index.html` is a self-contained page with an interactive playground that runs this
+library in the browser. Build its assets with `npm run build:docs` and open the file — it
+loads nothing from the network.
+
 ## Where it fits
 
 The stack Cereale replaces is **class-validator + class-transformer**:

@@ -50,6 +50,18 @@ const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
  */
 export const REDACTED = '[redacted]';
 
+/**
+ * Anything that can hand back a parsed JSON body — a `Request`, a `Response`, or a test double.
+ *
+ * Declared structurally rather than as the global `Request`, which does not exist unless the
+ * consumer's `lib` includes DOM or their `types` includes node. Naming the global here put a
+ * `Cannot find name 'Request'` error inside cereale's own published `.d.ts`, in a project that
+ * may not call `fromRequest` at all and cannot fix it from the outside.
+ */
+export interface JsonBody {
+  json(): Promise<any>;
+}
+
 // --- Internal Engine ---
 
 interface SerializeContext {
@@ -1100,7 +1112,7 @@ function parseJson(json: string): any {
  */
 export async function fromRequest<T>(
   clazz: ClassConstructor<T>,
-  request: Request,
+  request: JsonBody,
   options?: TransformOptions
 ): Promise<T> {
   let plain: any;

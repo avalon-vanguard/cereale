@@ -1,7 +1,7 @@
 {
   "name": "cereale",
   "version": "0.3.0",
-  "description": "Strongly typed JSON mapping and validation for TypeScript classes — validated domain objects, not validated data. A zero-dependency replacement for class-validator + class-transformer, on TC39 standard decorators.",
+  "description": "Strongly typed JSON mapping and validation for TypeScript classes \u2014 validated domain objects, not validated data. A zero-dependency replacement for class-validator + class-transformer, on TC39 standard decorators.",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -27,7 +27,7 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json",
-    "build:docs": "esbuild src/index.ts --bundle --format=iife --global-name=Cereale --minify --tsconfig=tsconfig.json --outfile=docs/cereale.js",
+    "build:docs": "node scripts/build-docs.mjs",
     "demo": "node --no-warnings=ExperimentalWarning --loader ts-node/esm src/example.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
@@ -35,8 +35,10 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "verify": "npm run type-check && npm run lint && npm run test && npm run build",
-    "prepublishOnly": "npm run verify"
+    "verify": "npm run type-check && npm run lint && npm run test && npm run build && npm run check:types && npm run check:docs",
+    "prepublishOnly": "npm run verify",
+    "check:docs": "node scripts/check-docs.mjs",
+    "check:types": "node scripts/check-types.mjs"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -64,6 +66,7 @@
   },
   "homepage": "https://github.com/Avalon-Vanguard/cereale#readme",
   "devDependencies": {
+    "@babel/standalone": "^8.0.4",
     "@eslint/js": "^10.0.1",
     "@swc/core": "^1.15.47",
     "@types/node": "^25.6.0",

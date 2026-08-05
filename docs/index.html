@@ -1,289 +1,845 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cereale - Spring-like JSON Mapping & Validation for TypeScript</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
-    <script src="cereale.js"></script>
-    <style>
-        .CodeMirror {
-            height: 400px;
-            border-radius: 0.5rem;
-            font-size: 14px;
-        }
-        .gradient-text {
-            background: linear-gradient(to right, #6366f1, #a855f7, #ec4899);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cereale — validated domain objects, not validated data</title>
+<meta name="description" content="Zero-dependency JSON mapping and validation for TypeScript classes. Maps JSON onto your own classes and checks the validation rules against the fields they are attached to, at compile time.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>">
+
+<style>
+/* ---------------------------------------------------------------- tokens */
+:root {
+  --bg: #fbfbfd;
+  --bg-raised: #ffffff;
+  --bg-sunken: #f3f3f7;
+  --text: #16161d;
+  --text-muted: #55555f;
+  --text-faint: #6b6b78;
+  --border: #e3e3ea;
+  --border-strong: #cfcfd9;
+  --accent: #4f46e5;
+  --accent-text: #4338ca;
+  --accent-soft: #eef2ff;
+  /* Filled-accent surfaces carry their own foreground: the dark theme lightens --accent
+     for legibility against the page, which then leaves white text on it below AA. */
+  --accent-solid: #4f46e5;
+  --on-accent: #ffffff;
+  --bad: #d4183d;
+  --bad-soft: #fff1f3;
+  --ok: #08795a;
+  --ok-soft: #eefaf5;
+  --warn: #9a5b00;
+  --warn-soft: #fff7ea;
+
+  /* Code surfaces stay dark in both themes: one syntax palette, always legible. */
+  --code-bg: #16161f;
+  --code-bg-raised: #1e1e29;
+  --code-border: #2b2b3a;
+  --code-text: #d6deeb;
+  --code-faint: #8a93b8;
+  --t-comment: #8a93b8;
+  --t-string: #b8e08a;
+  --t-keyword: #c792ea;
+  --t-decorator: #82aaff;
+  --t-type: #ffcb6b;
+  --t-number: #f78c6c;
+
+  --radius: 10px;
+  --radius-lg: 16px;
+  --shadow: 0 1px 2px rgba(16, 16, 30, .05), 0 8px 24px -12px rgba(16, 16, 30, .18);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --measure: 68ch;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0e14;
+    --bg-raised: #16161f;
+    --bg-sunken: #12121a;
+    --text: #e8e8f0;
+    --text-muted: #a3a3b4;
+    --text-faint: #9494ab;
+    --border: #262633;
+    --border-strong: #363648;
+    --accent: #8b85ff;
+    --accent-text: #a5a0ff;
+    --accent-soft: #1c1b35;
+    --accent-solid: #8b85ff;
+    --on-accent: #10101a;
+    --bad: #ff8095;
+    --bad-soft: #2a1620;
+    --ok: #5cd0a8;
+    --ok-soft: #10241f;
+    --warn: #e5a54b;
+    --warn-soft: #251d10;
+    --code-bg: #12121a;
+    --code-bg-raised: #191922;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .7);
+  }
+}
+
+/* The toggle wins over the media query in both directions. */
+:root[data-theme="light"] {
+  --bg: #fbfbfd; --bg-raised: #ffffff; --bg-sunken: #f3f3f7;
+  --text: #16161d; --text-muted: #55555f; --text-faint: #6b6b78;
+  --border: #e3e3ea; --border-strong: #cfcfd9;
+  --accent: #4f46e5; --accent-text: #4338ca; --accent-soft: #eef2ff;
+  --accent-solid: #4f46e5; --on-accent: #ffffff;
+  --bad: #d4183d; --bad-soft: #fff1f3; --ok: #08795a; --ok-soft: #eefaf5;
+  --warn: #9a5b00; --warn-soft: #fff7ea;
+  --code-bg: #16161f; --code-bg-raised: #1e1e29;
+  --shadow: 0 1px 2px rgba(16, 16, 30, .05), 0 8px 24px -12px rgba(16, 16, 30, .18);
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0e0e14; --bg-raised: #16161f; --bg-sunken: #12121a;
+  --text: #e8e8f0; --text-muted: #a3a3b4; --text-faint: #9494ab;
+  --border: #262633; --border-strong: #363648;
+  --accent: #8b85ff; --accent-text: #a5a0ff; --accent-soft: #1c1b35;
+  --accent-solid: #8b85ff; --on-accent: #10101a;
+  --bad: #ff8095; --bad-soft: #2a1620; --ok: #5cd0a8; --ok-soft: #10241f;
+  --warn: #e5a54b; --warn-soft: #251d10;
+  --code-bg: #12121a; --code-bg-raised: #191922;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .7);
+  color-scheme: dark;
+}
+
+/* ----------------------------------------------------------------- base */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+h1, h2, h3, h4 { line-height: 1.2; margin: 0; font-weight: 680; letter-spacing: -.02em; }
+h1 { font-size: clamp(2.1rem, 1.3rem + 3.4vw, 3.5rem); letter-spacing: -.035em; }
+h2 { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.1rem); letter-spacing: -.028em; }
+h3 { font-size: 1.125rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent-text); text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent); text-underline-offset: .18em; }
+a:hover { text-decoration-color: currentColor; }
+code, kbd, pre { font-family: var(--mono); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+.wrap { width: min(1120px, 100% - 2.5rem); margin-inline: auto; }
+/* Grid and flex children default to min-width:auto, so one wide code block stretches its
+   whole column past the viewport and takes the prose next to it along. */
+.hero-grid > *, .grid > *, .compare > *, .pg-grid > *, .ref-groups > *, .foot-grid > * { min-width: 0; }
+section { padding-block: clamp(3rem, 6vw, 5.5rem); }
+.lede { color: var(--text-muted); font-size: 1.0625rem; max-width: var(--measure); }
+.eyebrow {
+  font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent-text); margin: 0 0 .6rem;
+}
+.section-head { margin-bottom: 2.25rem; }
+.skip {
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  background: var(--accent-solid); color: var(--on-accent); padding: .6rem 1rem; border-radius: 0 0 var(--radius) 0;
+}
+.skip:focus { left: 0; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* ------------------------------------------------------------------ nav */
+header.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(150%) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner { display: flex; align-items: center; gap: 1rem; height: 3.75rem; }
+.brand { display: flex; align-items: baseline; gap: .5rem; font-weight: 700; letter-spacing: -.02em; font-size: 1.125rem; color: var(--text); text-decoration: none; }
+.brand .grain { font-size: 1rem; }
+.badge {
+  font: 600 .6875rem/1 var(--mono); padding: .3rem .45rem; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-text); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.nav-links { margin-left: auto; display: flex; align-items: center; gap: .35rem; }
+.nav-links a {
+  color: var(--text-muted); text-decoration: none; padding: .4rem .6rem; border-radius: var(--radius); font-size: .9375rem; font-weight: 500;
+}
+.nav-links a:hover { color: var(--text); background: var(--bg-sunken); }
+.nav-links a.ghost { border: 1px solid var(--border-strong); }
+@media (max-width: 640px) { .nav-hide { display: none; } }
+.icon-btn {
+  display: inline-grid; place-items: center; width: 2.125rem; height: 2.125rem;
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--bg-raised); color: var(--text-muted); cursor: pointer; padding: 0;
+}
+.icon-btn:hover { color: var(--text); }
+
+/* ---------------------------------------------------------------- hero */
+.hero { padding-block: clamp(3rem, 7vw, 6rem) clamp(2rem, 4vw, 3.5rem); }
+.hero-grid { display: grid; gap: clamp(2rem, 4vw, 3.5rem); align-items: start; }
+@media (min-width: 900px) { .hero-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); } }
+.hero h1 { margin-bottom: 1.1rem; }
+.hero h1 .accent { color: var(--accent-text); }
+.hero p.lede { font-size: 1.125rem; margin-bottom: 1.75rem; }
+.cta-row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+.btn {
+  display: inline-flex; align-items: center; gap: .5rem; font: 600 .9375rem/1 var(--sans);
+  padding: .75rem 1.15rem; border-radius: var(--radius); text-decoration: none; cursor: pointer; border: 1px solid transparent;
+}
+.btn-primary { background: var(--accent-solid); color: var(--on-accent); box-shadow: var(--shadow); }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-secondary { background: var(--bg-raised); color: var(--text); border-color: var(--border-strong); }
+.btn-secondary:hover { border-color: var(--text-faint); }
+.fact-row {
+  display: flex; flex-wrap: wrap; gap: .4rem .5rem; margin-top: 1.5rem;
+  font-size: .8125rem; color: var(--text-muted);
+}
+.fact { border: 1px solid var(--border); background: var(--bg-raised); border-radius: 999px; padding: .3rem .7rem; }
+.fact b { color: var(--text); font-weight: 640; }
+
+/* ---------------------------------------------------------------- code */
+.code {
+  position: relative; background: var(--code-bg); border: 1px solid var(--code-border);
+  border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow);
+}
+.code-head {
+  display: flex; align-items: center; gap: .5rem; padding: .55rem .9rem;
+  border-bottom: 1px solid var(--code-border); background: var(--code-bg-raised);
+  font: 500 .75rem/1 var(--mono); color: var(--code-faint);
+}
+.code-head .dot { width: .5rem; height: .5rem; border-radius: 50%; background: #33334a; }
+.code-head .name { margin-left: .35rem; }
+.code-head .right { margin-left: auto; }
+.code pre {
+  margin: 0; padding: 1.1rem 1.15rem; overflow-x: auto;
+  color: var(--code-text); font-size: .84375rem; line-height: 1.75; tab-size: 2;
+}
+.code pre code { display: block; min-width: max-content; }
+.ln { display: block; padding-inline: .35rem; margin-inline: -.35rem; border-radius: 3px; }
+.t-comment { color: var(--t-comment); font-style: italic; }
+.t-string { color: var(--t-string); }
+.t-keyword { color: var(--t-keyword); }
+.t-decorator { color: var(--t-decorator); }
+.t-type { color: var(--t-type); }
+.t-number { color: var(--t-number); }
+
+/* The page's one visual device: the line the compiler refuses. */
+.ln--error {
+  background: rgba(255, 92, 122, .09);
+  text-decoration: underline wavy #ff5c7a;
+  text-decoration-skip-ink: none;
+  text-underline-offset: .32em;
+}
+.tsc-error {
+  display: flex; gap: .6rem; align-items: flex-start;
+  margin: 0; padding: .7rem .9rem; border-top: 1px solid var(--code-border);
+  background: rgba(255, 92, 122, .08); color: #ffb3c0;
+  font: 500 .78125rem/1.5 var(--mono);
+}
+.tsc-error .mark { color: #ff5c7a; flex-shrink: 0; }
+
+/* --------------------------------------------------------------- panels */
+.panel {
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 1.35rem;
+}
+.grid { display: grid; gap: 1.1rem; }
+@media (min-width: 720px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 900px) { .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+.panel h3 { margin-bottom: .5rem; display: flex; align-items: center; gap: .5rem; }
+.panel p { color: var(--text-muted); font-size: .9375rem; margin: 0; }
+.tick { color: var(--ok); font-weight: 700; }
+.cross { color: var(--bad); font-weight: 700; }
+
+.compare { display: grid; gap: 1rem; }
+@media (min-width: 860px) { .compare { grid-template-columns: 1fr 1fr; } }
+.compare-label {
+  display: flex; align-items: center; gap: .5rem; margin: 0 0 .6rem;
+  font: 600 .8125rem/1 var(--sans); color: var(--text-muted);
+}
+.pill { font: 600 .6875rem/1 var(--sans); padding: .28rem .5rem; border-radius: 999px; }
+.pill-bad { background: var(--bad-soft); color: var(--bad); }
+.pill-ok { background: var(--ok-soft); color: var(--ok); }
+
+/* ----------------------------------------------------------- playground */
+.pg { background: var(--bg-sunken); border-block: 1px solid var(--border); }
+.pg-bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: 1rem; }
+.tabs { display: flex; flex-wrap: wrap; gap: .35rem; }
+.tab {
+  font: 500 .8125rem/1 var(--sans); padding: .45rem .7rem; border-radius: 999px; cursor: pointer;
+  background: var(--bg-raised); color: var(--text-muted); border: 1px solid var(--border);
+}
+.tab:hover { color: var(--text); }
+.tab[aria-pressed="true"] { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
+.pg-grid { display: grid; gap: 1rem; }
+@media (min-width: 960px) { .pg-grid { grid-template-columns: 1fr 1fr; } }
+.pg-pane { display: flex; flex-direction: column; min-width: 0; }
+#editor {
+  flex: 1; width: 100%; min-height: 400px; resize: vertical;
+  background: var(--code-bg); color: var(--code-text); border: 1px solid var(--code-border);
+  border-top: none; border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  padding: 1.1rem 1.15rem; font: .84375rem/1.75 var(--mono); tab-size: 2; white-space: pre;
+  overflow: auto;
+}
+#editor:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+#output {
+  flex: 1; min-height: 400px; margin: 0; overflow: auto;
+  background: var(--code-bg); color: var(--code-text); border: 1px solid var(--code-border);
+  border-top: none; border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  padding: 1.1rem 1.15rem; font: .84375rem/1.75 var(--mono); white-space: pre-wrap; word-break: break-word;
+}
+#output .out-err { color: #ff8095; }
+#output .out-dim { color: var(--code-faint); }
+.pg-note { font-size: .8125rem; color: var(--text-muted); margin: .9rem 0 0; }
+
+/* ---------------------------------------------------------------- table */
+.table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-raised); }
+table { border-collapse: collapse; width: 100%; font-size: .9375rem; }
+th, td { text-align: left; padding: .7rem .95rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+thead th { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); font-weight: 700; }
+tbody tr:last-child td { border-bottom: none; }
+td.note { white-space: normal; color: var(--text-muted); font-size: .875rem; }
+
+/* ------------------------------------------------------------ reference */
+.ref-bar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-bottom: 1.5rem; }
+#ref-filter {
+  flex: 1; min-width: 210px; font: .9375rem var(--sans); padding: .6rem .85rem;
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--bg-raised); color: var(--text);
+}
+#ref-count { font-size: .875rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ref-groups { display: grid; gap: 1.1rem; }
+@media (min-width: 780px) { .ref-groups { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1080px) { .ref-groups { grid-template-columns: repeat(3, 1fr); } }
+.ref-group { background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.1rem 1.2rem; }
+.ref-group h3 { font-size: .9375rem; margin-bottom: .3rem; }
+.ref-group .blurb { font-size: .8125rem; color: var(--text-faint); margin: 0 0 .8rem; }
+.ref-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.ref-group li { font-size: .8125rem; color: var(--text-muted); }
+.ref-group li code { color: var(--text); background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 5px; padding: .1rem .3rem; font-size: .78125rem; }
+.ref-group li .sum { display: block; margin-top: .15rem; }
+.ref-empty { color: var(--text-faint); font-size: .9375rem; }
+
+/* --------------------------------------------------------------- prose */
+.notes { display: grid; gap: .9rem; }
+.note-item { border-left: 2px solid var(--border-strong); padding-left: 1rem; }
+.note-item h3 { font-size: .9375rem; margin-bottom: .25rem; }
+.note-item p { color: var(--text-muted); font-size: .9375rem; margin: 0; }
+.callout {
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  background: var(--warn-soft); border-radius: var(--radius-lg); padding: 1rem 1.15rem;
+  font-size: .9375rem; color: var(--text);
+}
+.callout strong { color: var(--warn); }
+.inline-code { background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 5px; padding: .08rem .3rem; font-size: .875em; }
+
+footer { border-top: 1px solid var(--border); padding-block: 2.5rem; color: var(--text-muted); font-size: .875rem; }
+.foot-grid { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center; }
+</style>
 </head>
-<body class="bg-slate-50 text-slate-900 font-sans">
-    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16 items-center">
-                <div class="flex items-center">
-                    <span class="text-2xl font-bold gradient-text">Cereale</span>
-                </div>
-                <div class="hidden md:block">
-                    <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="#features" class="text-slate-600 hover:text-indigo-600 px-3 py-2 font-medium">Features</a>
-                        <a href="#playground" class="text-slate-600 hover:text-indigo-600 px-3 py-2 font-medium">Playground</a>
-                        <a href="#docs" class="text-slate-600 hover:text-indigo-600 px-3 py-2 font-medium">Docs</a>
-                        <a href="https://github.com/Avalon-Vanguard/cereale" class="bg-indigo-600 text-white px-4 py-2 rounded-md font-medium hover:bg-indigo-700 transition">GitHub</a>
-                    </div>
-                </div>
-            </div>
-        </div>
+
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top"><span class="grain" aria-hidden="true">🌾</span>cereale <span class="badge" id="version-badge">v0.3.0</span></a>
+    <nav class="nav-links" aria-label="Primary">
+      <a class="nav-hide" href="#guarantee">Guarantee</a>
+      <a class="nav-hide" href="#playground">Playground</a>
+      <a class="nav-hide" href="#errors">Errors</a>
+      <a class="nav-hide" href="#install">Install</a>
+      <a class="nav-hide" href="#reference">Reference</a>
+      <a class="ghost" href="https://github.com/Avalon-Vanguard/cereale">GitHub</a>
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch between light and dark theme">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+        </svg>
+      </button>
     </nav>
+  </div>
+</header>
 
-    <main>
-        <!-- Hero Section -->
-        <section class="py-20 px-4">
-            <div class="max-w-4xl mx-auto text-center">
-                <h1 class="text-5xl md:text-6xl font-extrabold mb-6">
-                    <span class="gradient-text">Spring-like</span> JSON Mapping <br>& Validation for TypeScript
-                </h1>
-                <p class="text-xl text-slate-600 mb-10">
-                    A lightweight library with <span class="font-bold">ZERO external dependencies</span>. 
-                    Simplify your data layer with familiar decorators.
-                </p>
-                <div class="flex justify-center gap-4">
-                    <a href="#playground" class="bg-indigo-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition">Try on the fly</a>
-                    <code class="bg-slate-800 text-slate-100 px-6 py-3 rounded-lg text-lg font-mono flex items-center">
-                        npm install cereale
-                    </code>
-                </div>
-            </div>
-        </section>
+<main id="main">
 
-        <!-- Features -->
-        <section id="features" class="py-20 bg-white">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <h2 class="text-3xl font-bold text-center mb-16">Why Cereale?</h2>
-                <div class="grid md:grid-cols-3 gap-8">
-                    <div class="p-6 rounded-xl bg-slate-50 border border-slate-100">
-                        <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4 text-indigo-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                        </div>
-                        <h3 class="text-xl font-bold mb-2">Blazing Fast</h3>
-                        <p class="text-slate-600">Zero overhead. Only uses decorators and metadata to handle mapping and validation.</p>
-                    </div>
-                    <div class="p-6 rounded-xl bg-slate-50 border border-slate-100">
-                        <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4 text-purple-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.040L3 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622l-.382-3.016z" />
-                            </svg>
-                        </div>
-                        <h3 class="text-xl font-bold mb-2">Integrated Validation</h3>
-                        <p class="text-slate-600">Validate while you map. Ensure your data is correct before it even hits your business logic.</p>
-                    </div>
-                    <div class="p-6 rounded-xl bg-slate-50 border border-slate-100">
-                        <div class="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center mb-4 text-pink-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a2 2 0 00-1.96 1.414l-.477 2.387a2 2 0 00.547 1.022l1.428 1.428a2 2 0 002.828 0l1.428-1.428a2 2 0 000-2.828l-1.428-1.428z" />
-                            </svg>
-                        </div>
-                        <h3 class="text-xl font-bold mb-2">Polymorphism</h3>
-                        <p class="text-slate-600">Native support for complex hierarchies. Map to the right subclass automatically based on a discriminator.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
+<!-- ============================================================= hero -->
+<section class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <h1>Validated <span class="accent">domain objects</span>, not validated data.</h1>
+      <p class="lede">
+        cereale maps JSON onto your own classes and gives you back real instances — with your
+        methods, your inheritance, your <code class="inline-code">instanceof</code> checks. And every
+        rule that implies a type is checked against the field it is attached to, at compile time.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#playground">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 4l10 6-10 6V4z"/></svg>
+          Run it in the browser
+        </a>
+        <a class="btn btn-secondary" href="https://github.com/Avalon-Vanguard/cereale">Read the source</a>
+      </div>
+      <div class="fact-row">
+        <span class="fact"><b>0</b> runtime dependencies</span>
+        <span class="fact"><b id="decorator-count">68</b> decorators</span>
+        <span class="fact">TC39 <b>standard decorators</b></span>
+        <span class="fact">ESM + CJS</span>
+        <span class="fact">Node <b id="node-req">&ge;20</b></span>
+      </div>
+    </div>
 
-        <!-- Playground -->
-        <section id="playground" class="py-20 bg-slate-900 text-white">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
-                    <div>
-                        <h2 class="text-3xl font-bold">Interactive Playground</h2>
-                        <p class="text-slate-400 mt-2">Edit the code below and see the result in real-time.</p>
-                    </div>
-                    <button id="run-btn" class="bg-indigo-600 hover:bg-indigo-500 px-8 py-3 rounded-lg font-bold transition flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
-                        </svg>
-                        Run Code
-                    </button>
-                </div>
-
-                <div class="grid lg:grid-cols-2 gap-6">
-                    <div>
-                        <div class="bg-slate-800 rounded-t-lg px-4 py-2 text-sm font-mono text-slate-400 border-b border-slate-700">TypeScript / Cereale</div>
-                        <textarea id="editor"></textarea>
-                    </div>
-                    <div class="flex flex-col">
-                        <div class="bg-slate-800 rounded-t-lg px-4 py-2 text-sm font-mono text-slate-400 border-b border-slate-700">Output</div>
-                        <pre id="output" class="bg-slate-950 p-6 rounded-b-lg font-mono text-sm overflow-auto flex-grow" style="height: 400px; color: #a9b7c6;"></pre>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Docs Summary -->
-        <section id="docs" class="py-20 bg-white">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <h2 class="text-3xl font-bold text-center mb-16">Available Decorators</h2>
-                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div>
-                        <h3 class="font-bold text-lg mb-4 text-indigo-600">Mapping</h3>
-                        <ul class="space-y-2 text-slate-600">
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonProperty('first_name')</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonAlias(...names)</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonSerialize(cls)</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonDeserialize(cls)</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonType(() => cls)</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonPolymorphic(field, types)</code></li>
-                        </ul>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-lg mb-4 text-indigo-600">Access Control</h3>
-                        <ul class="space-y-2 text-slate-600">
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonIgnore()</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonReadOnly()</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonWriteOnly()</code></li>
-                            <li class="text-sm pt-2">Naming strategies: <code class="text-sm bg-slate-100 p-1 rounded">snake_case</code>, <code class="text-sm bg-slate-100 p-1 rounded">kebab-case</code>, …</li>
-                        </ul>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-lg mb-4 text-purple-600">Basic Validation</h3>
-                        <ul class="space-y-2 text-slate-600">
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@IsString()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsNumber()</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@IsInt()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsBoolean()</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@IsDate()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsObject()</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@IsNotEmpty()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsDefined()</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@Positive()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@Negative()</code></li>
-                        </ul>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-lg mb-4 text-pink-600">Advanced Validation</h3>
-                        <ul class="space-y-2 text-slate-600">
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@Min(n)</code>, <code class="text-sm bg-slate-100 p-1 rounded">@Max(n)</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@MinLength(n)</code>, <code class="text-sm bg-slate-100 p-1 rounded">@MaxLength(n)</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@Email()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsUrl()</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@IsUUID(v?)</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsEnum(e)</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@MinDate(d)</code>, <code class="text-sm bg-slate-100 p-1 rounded">@ArrayUnique()</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@ValidateNested()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@ValidateIf(fn)</code></li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <footer class="bg-slate-50 border-t border-slate-200 py-12">
-        <div class="max-w-7xl mx-auto px-4 text-center text-slate-500">
-            <p>© 2026 Cereale Library. Licensed under MIT.</p>
+    <div>
+      <div class="code">
+        <div class="code-head">
+          <span class="dot" aria-hidden="true"></span><span class="name">order.ts</span>
         </div>
-    </footer>
+        <pre><code data-lang="ts" data-error-line="9">class Order {
+  @JsonProperty('order_ref')
+  @IsString() @Matches(/^[A-Z]-\d+$/)
+  ref!: string;
 
-    <script>
-        const initialCode = `// 1. Define your model with decorators
-class User {
-  @JsonProperty('display_name')
+  @IsInt() @Min(1)
+  quantity!: number;
+
   @IsString()
-  @MinLength(3)
-  displayName;
+  placedAt!: Date;
 
-  @IsInt()
-  @Min(18)
-  age;
-
-  @Email()
-  email;
-
-  // Accepted from a request, never sent back out
-  @JsonWriteOnly()
-  @IsString()
-  password;
-
-  constructor(displayName, age, email, password) {
-    this.displayName = displayName;
-    this.age = age;
-    this.email = email;
-    this.password = password;
-  }
+  total(): number { return this.quantity * 9.99; }
 }
 
-async function demo() {
-  console.log("--- Mapping a valid user ---");
-  const user = new User("Alice", 25, "alice@example.com", "hunter2");
-  const json = await toJson(user);
-  console.log("JSON Output:", json);
-  console.log("Password withheld:", !json.includes("hunter2"));
+const order = fromJsonSync(Order, body);  // a real Order
+order.total();                            // methods intact</code></pre>
+        <!-- Replaced at load with the verbatim diagnostic that scripts/build-docs.mjs
+             captured from tsc. The static text is the fallback, and the build fails if
+             this snippet ever stops being a compile error. -->
+        <p class="tsc-error" id="hero-diagnostic" data-case="hero"><span class="mark" aria-hidden="true">✖</span><span><strong>ts(1240)</strong> Unable to resolve signature of property decorator when called as an expression.<br>&nbsp;&nbsp;…&nbsp;&nbsp;Type 'Date' is not assignable to type 'string'.</span></p>
+      </div>
+      <p class="pg-note">
+        That is the compiler, not cereale — and it is the real thing: the snippet above is
+        compiled by <code class="inline-code">tsc</code> when this page is built, and the build
+        fails if it ever stops being an error.
+      </p>
+    </div>
+  </div>
+</section>
 
-  console.log("\\n--- Reading it back ---");
-  const parsed = await fromJson(User, json, { validate: false });
-  console.log("displayName read from display_name:", parsed.displayName);
+<!-- ======================================================== guarantee -->
+<section id="guarantee">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">The guarantee</p>
+      <h2>Your rules and your types cannot disagree</h2>
+      <p class="lede">
+        A legacy decorator is typed <code class="inline-code">(prototype, propertyName) =&gt; void</code>.
+        Its signature carries nothing about the field's declared type, so a rule that does not fit
+        the field still compiles. A standard decorator is handed a
+        <code class="inline-code">ClassFieldDecoratorContext&lt;This, Value&gt;</code>, which does
+        carry it. cereale uses it.
+      </p>
+    </div>
 
-  console.log("\\n--- Reporting validation failures ---");
-  try {
-    await fromJson(User, '{"display_name": "Bo", "age": 15, "email": "nope", "password": "x"}');
-  } catch (error) {
-    console.log("Caught:", error.message);
-    console.log("Flattened:", flattenErrors(error.errors));
-  }
+    <div class="compare">
+      <div>
+        <p class="compare-label"><span class="pill pill-bad">compiles, then fails at runtime</span> class-validator</p>
+        <div class="code">
+          <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">with legacy decorators</span></div>
+          <pre><code data-lang="ts">class User {
+  @IsString()
+  age: number;      // accepted by the compiler
 }
 
-demo();`;
+// ...discovered in production, on a payload
+// that happened to carry the wrong shape.</code></pre>
+        </div>
+      </div>
+      <div>
+        <p class="compare-label"><span class="pill pill-ok">rejected before it runs</span> cereale</p>
+        <div class="code">
+          <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">with standard decorators</span></div>
+          <pre><code data-lang="ts" data-error-line="2">class User {
+  @IsString()
+  age!: number;     // Type 'number' is not
+}                   // assignable to 'string'
 
-        const editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
-            mode: 'javascript',
-            theme: 'dracula',
-            lineNumbers: true,
-            indentUnit: 2,
-            tabSize: 2,
-        });
-        editor.setValue(initialCode);
+// ...caught by your editor, by tsc, and by
+// CI. It never gets as far as a payload.</code></pre>
+        </div>
+      </div>
+    </div>
 
-        const outputElement = document.getElementById('output');
-        const runBtn = document.getElementById('run-btn');
+    <div class="grid grid-3" style="margin-top:1.75rem">
+      <div class="panel">
+        <h3>Scalars against scalars</h3>
+        <p><code class="inline-code">@Min(1)</code> on a <code class="inline-code">string</code> is a compile error, as is <code class="inline-code">@MinLength(2)</code> on a <code class="inline-code">number</code>.</p>
+      </div>
+      <div class="panel">
+        <h3><code class="inline-code">each</code> against arrays</h3>
+        <p><code class="inline-code">@IsString({ each: true })</code> demands a <code class="inline-code">string[]</code>; a bare <code class="inline-code">@IsString()</code> on one is rejected.</p>
+      </div>
+      <div class="panel">
+        <h3>Classes against classes</h3>
+        <p><code class="inline-code">@JsonType(() =&gt; Address)</code>, <code class="inline-code">@JsonSerialize</code> and <code class="inline-code">@IsEnum(E)</code> are all checked against the field.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-        // Custom console.log to show output in the pre element
-        const originalLog = console.log;
-        function logToOutput(...args) {
-            originalLog(...args);
-            const message = args.map(arg => 
-                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-            ).join(' ');
-            outputElement.textContent += message + '\\n';
-        }
+<!-- ========================================================= instances -->
+<section id="instances" style="background:var(--bg-sunken);border-block:1px solid var(--border)">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">What you get back</p>
+      <h2>An instance of your class, not a shape that resembles it</h2>
+      <p class="lede">
+        Nested objects and arrays you declare with <code class="inline-code">@JsonType</code>, and
+        subtypes you declare with <code class="inline-code">@JsonPolymorphic</code>, come back as real
+        classes — so the behaviour you attached to your model survives the trip through JSON. What
+        you do not declare, cereale leaves alone; it infers nothing.
+      </p>
+    </div>
+    <div class="compare">
+      <div class="code">
+        <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">catalogue.ts</span></div>
+        <pre><code data-lang="ts">class Media {
+  @IsString() title!: string;
+}
+class Movie extends Media {
+  @IsInt() @Min(1) duration!: number;
+  hours() { return this.duration / 60; }
+}
+class Song extends Media {
+  @IsString() artist!: string;
+}
 
-        runBtn.addEventListener('click', async () => {
-            outputElement.textContent = '';
-            const code = editor.getValue();
-            
-            try {
-                // Transpile TypeScript-like code to JS with decorators support
-                const transpiled = Babel.transform(code, {
-                    presets: ['env', 'typescript'],
-                    plugins: [
-                        ['proposal-decorators', { legacy: true }],
-                        ['proposal-class-properties', { loose: true }]
-                    ]
-                }).code;
+class Playlist {
+  @JsonPolymorphic&lt;Media&gt;('type', [
+    { value: Movie, name: 'movie' },
+    { value: Song,  name: 'song'  },
+  ])
+  @ValidateNested({ each: true })
+  items!: Media[];
+}</code></pre>
+      </div>
+      <div class="code">
+        <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">what comes out</span></div>
+        <pre><code data-lang="ts">const list = fromJsonSync(Playlist, body);
+const first = list.items[0];
 
-                // Put every library export in scope. Derived from the bundle rather than
-                // hand-listed, so a new decorator is usable here the moment it is exported.
-                const exportNames = Object.keys(Cereale).filter(name => /^[A-Za-z_$][\w$]*$/.test(name));
+first instanceof Movie   // true
 
-                const run = new Function('console', ...exportNames, transpiled);
-                await run({ log: logToOutput }, ...exportNames.map(name => Cereale[name]));
-            } catch (err) {
-                outputElement.textContent += 'Error: ' + err.message + '\\n';
-                if (err.stack) {
-                    // originalLog(err.stack);
-                }
-            }
-        });
-    </script>
+if (first instanceof Movie) {
+  first.hours();         // 2.46… — narrowing
+}                        // works, because it
+                         // really is one.
+
+// Base-class rules reach subclasses, and a
+// subclass adds to them rather than
+// replacing them.</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================== playground -->
+<section class="pg" id="playground">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Playground</p>
+      <h2>The real library, running here</h2>
+      <p class="lede">
+        This page bundles cereale itself and compiles what you type with standard decorators.
+        Edit anything and run it.
+      </p>
+    </div>
+
+    <div class="pg-bar">
+      <!-- Deliberately not role="tablist": these load code into a single editor rather than
+           switching panels, and a half-implemented tab widget (no tabpanel, no arrow-key
+           navigation) misleads a screen reader more than plain toggle buttons do. -->
+      <div class="tabs" role="group" aria-label="Playground examples" id="tabs"></div>
+      <button class="btn btn-primary" id="run-btn" type="button" style="margin-left:auto">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 4l10 6-10 6V4z"/></svg>
+        Run
+      </button>
+    </div>
+
+    <div class="pg-grid">
+      <div class="pg-pane">
+        <div class="code-head" style="border:1px solid var(--code-border);border-bottom:none;border-radius:var(--radius-lg) var(--radius-lg) 0 0">
+          <span class="dot" aria-hidden="true"></span><span class="name">playground.ts</span>
+        </div>
+        <textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
+                  aria-label="TypeScript source to run"></textarea>
+      </div>
+      <div class="pg-pane">
+        <div class="code-head" style="border:1px solid var(--code-border);border-bottom:none;border-radius:var(--radius-lg) var(--radius-lg) 0 0">
+          <span class="dot" aria-hidden="true"></span><span class="name">output</span>
+          <span class="right" id="pg-status"></span>
+        </div>
+        <pre id="output" aria-live="polite" aria-atomic="false" role="status"></pre>
+      </div>
+    </div>
+
+    <p class="pg-note">
+      The compiler here strips types and lowers decorators; it does not type-check. The compile-time
+      guarantee above is what your editor and <code class="inline-code">tsc</code> give you — a browser
+      cannot demonstrate an error that stops a build.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ errors -->
+<section id="errors">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Diagnosability</p>
+      <h2>Nothing fails quietly</h2>
+      <p class="lede">
+        The 0.3.0 release exists because of this. A mapping layer that loses your data and reports
+        success is worse than one that stops, so every silent failure found in the engine was turned
+        into an error that names the cause and the way out.
+      </p>
+    </div>
+
+    <div class="grid grid-3">
+      <div class="panel">
+        <h3>A <code class="inline-code">Map</code> used to become <code class="inline-code">{}</code></h3>
+        <p>Along with <code class="inline-code">Set</code>, <code class="inline-code">RegExp</code>, <code class="inline-code">Error</code>, typed arrays, <code class="inline-code">bigint</code>, symbols and functions — each with its own version of the same silence.</p>
+      </div>
+      <div class="panel">
+        <h3>A misconfigured compiler used to throw from inside</h3>
+        <p><code class="inline-code">TypeError: Cannot convert undefined or null to object</code>, which names neither the cause nor the one-line fix.</p>
+      </div>
+      <div class="panel">
+        <h3>A build used to succeed while emitting nothing that runs</h3>
+        <p>Vite 8 passes decorator syntax straight through. The bundle builds; the first import throws.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:1.5rem" class="code">
+      <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">what you get instead</span></div>
+      <pre><code data-lang="text">JsonMappingError: lines[1].tags[0] is a Set, which cannot be serialized to JSON.
+Give the property a @JsonSerialize() serializer that converts it, or drop it from
+the output with @JsonIgnore().
+
+TypeError: cereale needs TC39 standard decorators, but the compiler emitted legacy
+ones. Set "experimentalDecorators": false in tsconfig.json (and drop
+"emitDecoratorMetadata").
+
+JsonMappingError: Circular reference detected during serialization at child.parent.
+Break the cycle with @JsonIgnore() on the back-reference, or supply a
+@JsonSerialize() serializer for that property.</code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================================= toolchain -->
+<section id="toolchain" style="background:var(--bg-sunken);border-block:1px solid var(--border)">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Before you install</p>
+      <h2>The toolchain cost, stated plainly</h2>
+      <p class="lede">
+        cereale reads the metadata that only a <strong>standard</strong> decorator transform emits, so
+        which compiler you use decides whether it works at all. This table is executed by a test on
+        every CI run, not asserted here.
+      </p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <caption class="sr-only">Transformer support for TC39 standard decorators</caption>
+        <thead>
+          <tr><th scope="col">Transformer</th><th scope="col">Works</th><th scope="col">Setting</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>tsc</code></td><td><span class="tick">✓</span></td><td class="note"><code>experimentalDecorators: false</code>, <code>target: ES2022</code>+</td></tr>
+          <tr><td>esbuild</td><td><span class="tick">✓</span></td><td class="note">the same settings via <code>tsconfigRaw</code></td></tr>
+          <tr><td>swc</td><td><span class="tick">✓</span></td><td class="note"><code>jsc.transform.decoratorVersion: "2022-03"</code></td></tr>
+          <tr><td>oxc</td><td><span class="cross">✗</span></td><td class="note">used by <strong>Vite&nbsp;8</strong> and <strong>Vitest&nbsp;4</strong> — see below</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout" style="margin-top:1.25rem">
+      <strong>On Vite 8 or Vitest 4?</strong> oxc leaves decorator syntax in the output and reports
+      nothing: <code class="inline-code">vitest</code> prints <em>0 test</em> next to a bare
+      <code class="inline-code">SyntaxError</code>, and <code class="inline-code">vite build</code>
+      reports success while emitting a bundle that throws on first import. cereale ships the plugin
+      that fixes it.
+    </div>
+
+    <div class="code" style="margin-top:1.25rem;max-width:640px">
+      <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">vite.config.ts</span></div>
+      <pre><code data-lang="ts">import { standardDecorators } from 'cereale/vite';
+
+export default defineConfig({
+  plugins: [standardDecorators()],
+});</code></pre>
+    </div>
+    <p class="pg-note" style="max-width:var(--measure)">
+      It transforms with esbuild, falling back to the TypeScript compiler — cereale depends on
+      neither. Nothing in it is specific to cereale; it can be deleted once oxc implements the
+      transform.
+    </p>
+  </div>
+</section>
+
+<!-- =========================================================== install -->
+<section id="install">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Getting started</p>
+      <h2>Two settings, and one caveat</h2>
+    </div>
+
+    <div class="compare">
+      <div>
+        <p class="compare-label"><span class="pill pill-ok">tsconfig.json</span> what the compiler needs</p>
+        <div class="code">
+          <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">tsconfig.json</span></div>
+          <pre><code data-lang="text">{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ESNext", "ESNext.Decorators"],
+    "experimentalDecorators": false
+  }
+}</code></pre>
+        </div>
+        <p class="pg-note">
+          No <code class="inline-code">reflect-metadata</code>, and
+          <code class="inline-code">emitDecoratorMetadata</code> is never read. If
+          <code class="inline-code">experimentalDecorators</code> is on, cereale says so by name
+          instead of failing somewhere inside itself.
+        </p>
+      </div>
+
+      <div>
+        <p class="compare-label"><span class="pill pill-bad">not on npm yet</span> installing it today</p>
+        <div class="code">
+          <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">shell</span></div>
+          <pre><code data-lang="text">git clone https://github.com/Avalon-Vanguard/cereale
+cd cereale
+npm install &amp;&amp; npm run build
+npm pack                    # → cereale-0.3.0.tgz
+
+# then, from your own project
+npm install ../cereale/cereale-0.3.0.tgz</code></pre>
+        </div>
+        <p class="pg-note">
+          <code class="inline-code">npm install cereale</code> does <strong>not</strong> resolve to
+          this library — the name is unclaimed on the registry. Installing straight from GitHub
+          will not work either: the build output is not committed, so the package would arrive
+          without its <code class="inline-code">dist/</code>.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================================= reference -->
+<section id="reference">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Reference</p>
+      <h2>Everything cereale exports</h2>
+      <p class="lede">
+        Every rule that implies a type is checked against the field it decorates — a few
+        deliberately do not, because they fit any field
+        (<code class="inline-code">@IsDefined</code>) or because the constraint is negative and
+        narrowing it would be backwards (<code class="inline-code">@IsNotIn</code>). All of them take
+        <code class="inline-code">{ each: true }</code> to run per element of an array, and a
+        <code class="inline-code">message</code>, reported verbatim.
+      </p>
+    </div>
+
+    <div class="ref-bar">
+      <label for="ref-filter" class="sr-only">Filter the reference</label>
+      <input id="ref-filter" type="search" placeholder="Filter — try “uuid”, “array”, “naming”…" autocomplete="off">
+      <span id="ref-count"></span>
+    </div>
+
+    <div class="ref-groups" id="ref-groups"></div>
+    <noscript>
+      <p class="ref-empty">The reference is rendered with JavaScript. The full list is in the
+        <a href="https://github.com/Avalon-Vanguard/cereale#api-reference">README</a>.</p>
+    </noscript>
+  </div>
+</section>
+
+<!-- ============================================================ limits -->
+<section id="limits" style="background:var(--bg-sunken);border-top:1px solid var(--border)">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Honest limits</p>
+      <h2>What cereale is not</h2>
+    </div>
+
+    <div class="grid grid-2">
+      <div class="notes">
+        <div class="note-item">
+          <h3>It does not infer types from a schema</h3>
+          <p>You write the field type <em>and</em> the rule; cereale guarantees they agree. If you
+            want the type derived from a schema, that is Zod's design, and Zod is the right tool for it.</p>
+        </div>
+        <div class="note-item">
+          <h3>It cannot coexist with legacy decorators</h3>
+          <p>The two decorator systems are a whole-program setting. A project that still needs
+            <code class="inline-code">experimentalDecorators</code> for another library cannot use cereale yet.</p>
+        </div>
+        <div class="note-item">
+          <h3>Rules live on the class, not on the data</h3>
+          <p><code class="inline-code">validate()</code> on a plain object reports nothing. Validate the
+            instance you get back from <code class="inline-code">toInstance</code>.</p>
+        </div>
+      </div>
+      <div class="notes">
+        <div class="note-item">
+          <h3>Renaming is not backwards-compatible by itself</h3>
+          <p>Once a property carries <code class="inline-code">@JsonProperty</code>, its original name is
+            no longer accepted on input. Add <code class="inline-code">@JsonAlias</code> to keep older clients working.</p>
+        </div>
+        <div class="note-item">
+          <h3><code class="inline-code">abstract</code> and <code class="inline-code">accessor</code> fields cannot be decorated</h3>
+          <p>Standard decorators do not apply to abstract members, and an
+            <code class="inline-code">accessor</code> field keeps its value in a private slot that mapping
+            cannot reach. Both are errors rather than silent no-ops.</p>
+        </div>
+        <div class="note-item">
+          <h3>It is not on npm yet</h3>
+          <p>0.3.0 lives in the repository. <code class="inline-code">npm install cereale</code> does not
+            resolve to this library — build it from source until it is published.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-grid">
+    <p style="margin:0">cereale — MIT licensed. Built by Avalon Vanguard.</p>
+    <p style="margin:0">
+      <a href="https://github.com/Avalon-Vanguard/cereale">Source</a> ·
+      <a href="https://github.com/Avalon-Vanguard/cereale/blob/main/CHANGELOG.md">Changelog</a> ·
+      <a href="https://github.com/Avalon-Vanguard/cereale/issues">Issues</a>
+    </p>
+  </div>
+</footer>
+
+<script src="meta.js"></script>
+<script src="diagnostics.js"></script>
+<script src="cereale.js"></script>
+<script src="page.js"></script>
 </body>
 </html>

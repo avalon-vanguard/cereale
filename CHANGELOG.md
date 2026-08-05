@@ -71,6 +71,34 @@ came free with the bookkeeping.
   of them.
 - The plugin's TypeScript path emitted a `//# sourceMappingURL=` comment pointing at a file
   nobody wrote, which Vite followed and failed to read on every transformed module.
+- `fromRequest` was declared as taking the global `Request`, so cereale's own published
+  `.d.ts` raised `Cannot find name 'Request'` in any project whose `lib` and `types` did not
+  happen to supply it — an error inside a dependency, in code the consumer may never call,
+  that they could not fix from the outside. It now takes a structural `JsonBody`
+  (`{ json(): Promise<any> }`), which a `Request` still satisfies. The library's own type
+  tests had been hiding this by enabling both `DOM` and `skipLibCheck`; `npm run check:types`
+  now compiles a consumer against `dist/` with neither.
+
+### The landing page
+
+`docs/index.html` was rebuilt. Its playground had been dead for some time and said nothing
+about it: the page loaded `@babel/standalone` from an **unpinned** CDN URL, which rolled over
+to Babel 8 and dropped the `proposal-class-properties` plugin the page asked for, so
+`Babel.transform` threw before it ever reached the decorators — and the decorator config it
+passed was `{ legacy: true }`, which 0.2.0 had already made wrong. The copy was still selling
+the 0.1.0 pitch ("Spring-like"), listed about half the decorators, and claimed "Zero overhead"
+against a README that publishes the real microsecond costs.
+
+The rebuild is one self-contained page: hand-written CSS, no Tailwind CDN, no CodeMirror, and
+a vendored compiler pinned by `package.json`. It loads **nothing** from the network, which
+`npm run check:docs` now enforces in CI. The playground runs the real bundled library across
+six examples; the reference lists all 68 decorators and the full API, counted from the bundle
+at runtime so it cannot drift.
+
+The hero's compiler error is not typed into the HTML — `scripts/build-docs.mjs` compiles the
+snippet with the real `tsc` and writes the verbatim diagnostic into `docs/diagnostics.js`,
+failing the build if a snippet the page calls a compile error ever compiles. A third snippet
+that must compile guards against the harness passing vacuously.
 
 ### Positioning
 

@@ -41,3 +41,12 @@ jobs:
         node --input-type=commonjs -e "const { standardDecorators } = require('./dist/cjs/vite.js'); if (standardDecorators().enforce !== 'pre') throw new Error('CJS cereale/vite broken');"
     - name: Run Demo
       run: npm run demo
+    - name: Published types stand alone
+      run: npm run check:types
+    - name: Landing page loads nothing from the network
+      run: npm run check:docs
+    - name: Landing page bundle is in sync with src/
+      run: |
+        npm run build:docs
+        git diff --exit-code -- docs/ \
+          || (echo "docs/ is stale — run 'npm run build:docs' and commit the result" && exit 1)

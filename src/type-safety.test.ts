@@ -21,8 +21,9 @@ function typeCheck(body: string): { ok: boolean; output: string } {
     writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({
       compilerOptions: {
         target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext',
-        // DOM supplies URL/Request, which the library's own signatures reference. A real
-        // consumer has these from either DOM or @types/node.
+        // These cases compile the library's *source*, whose implementations call `new URL()`.
+        // Nothing in the published signatures needs DOM — scripts/check-types.mjs compiles a
+        // consumer against dist/ with no DOM lib and no @types/node to keep it that way.
         lib: ['ESNext', 'ESNext.Decorators', 'DOM'], strict: true,
         strictPropertyInitialization: false, noEmit: true, skipLibCheck: true,
       },
