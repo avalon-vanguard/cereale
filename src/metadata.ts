@@ -15,8 +15,22 @@ import type { ClassConstructor } from './interfaces.js';
  */
 const METADATA_KEY: symbol = (Symbol as { metadata?: symbol }).metadata ?? Symbol.for('Symbol.metadata');
 
-// Also installed globally, because a consumer's own compiler emit may read `Symbol.metadata`
-// directly. package.json marks this module as having side effects so it survives bundling.
+// Also installed globally, because a consumer's own compiler emit reads `Symbol.metadata`
+// directly and does not share our fallback. tsc emits
+//
+//   const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(null) : void 0;
+//
+// so on a runtime without the well-known symbol the class is decorated with `metadata:
+// undefined` and ends up with no metadata at all. (esbuild's `__knownSymbol` has the same
+// `Symbol.for` fallback we do and needs nothing from us; tsc does.)
+//
+// `sideEffects` in package.json is what keeps this statement through bundling — and it has to
+// name `index.ts`/`index.js` as well as this module. Marking only this one is not enough: the
+// barrel is then itself side-effect-free, so a bundler drops the `export * from './metadata.js'`
+// edge before this module's own marking is ever consulted, and the install silently vanishes.
+// Measured on `import { configure } from 'cereale'`: absent from all three of esbuild, webpack
+// and rollup until the barrel was listed too. It costs ~100 bytes, and only for imports that
+// pull in nothing else — every entry point that touches a model was already byte-identical.
 ((Symbol as { metadata?: symbol }).metadata as symbol | undefined) ??= METADATA_KEY;
 
 export interface ValidationArguments {

@@ -506,7 +506,7 @@ source and the published bundle:
 
 | What you import | esbuild | rollup | webpack |
 | --- | ---: | ---: | ---: |
-| `flattenErrors` | 287 | 292 | 291 |
+| `flattenErrors` | 394 | 367 | 394 |
 | one decorator | 1,837 | 1,823 | 1,818 |
 | `validateSync` | 3,722 | 3,554 | 3,738 |
 | `toPlainSync` | 7,744 | 7,769 | 7,771 |
@@ -517,6 +517,13 @@ source and the published bundle:
 The serializer and the deserializer drop independently: read JSON and you do not pay for
 writing it. The validator is kept by both, because `validate` defaults to `true` and the entry
 points reference it whatever a given call site passes.
+
+The floor is about a hundred bytes: cereale installs `Symbol.metadata` if the runtime lacks it,
+and that install has to survive tree-shaking or a `tsc`-compiled consumer decorates its classes
+with no metadata at all. It is why `sideEffects` names `index.js` as well as `metadata.js` —
+marking only the latter leaves the barrel itself droppable, so the edge to it is pruned before
+its own marking is ever read. That cost lands only on the first row; every import that touches a
+model was already carrying it.
 
 This did not come for free. Thirty of the rules are declared as top-level calls —
 `export const IsString = rule(…)` — and rollup can prove such a call side-effect-free by reading

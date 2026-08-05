@@ -23,8 +23,10 @@
     }
   },
   "sideEffects": [
+    "./dist/esm/index.js",
     "./dist/esm/metadata.js",
     "./dist/cereale.min.js",
+    "./src/index.ts",
     "./src/metadata.ts"
   ],
   "files": [

@@ -117,6 +117,27 @@ describe('tree-shaking', () => {
     expectShaken(code, [MARKER.validator], [MARKER.serializer, MARKER.deserializer, MARKER.isString]);
   });
 
+  /**
+   * The `Symbol.metadata` install at the top of metadata.ts is a bare statement, not an export,
+   * so it survives only because `sideEffects` names that module — and naming it is one hop short
+   * of enough. The barrel that re-exports it is side-effect-free too, so a bundler prunes the
+   * `export * from './metadata.js'` edge before metadata.js's own marking is ever consulted.
+   *
+   * Nothing notices, in the usual way. `import { configure } from 'cereale'` came out at 145
+   * bytes through esbuild, 143 through webpack and 144 through rollup with `Symbol.metadata`
+   * absent from all three — and a tsc-compiled consumer on a runtime without the well-known
+   * symbol is then decorated with `metadata: undefined`, which is to say with no rules at all.
+   */
+  it('installs Symbol.metadata even when nothing model-shaped is imported', async () => {
+    const code = await bundle(`
+      import { configure } from CEREALE;
+      export const f = (o) => configure(o);
+    `);
+
+    expect(code, 'the Symbol.metadata install was pruned along with the barrel').toContain('Symbol.metadata');
+    expectShaken(code, [], [MARKER.isString, MARKER.serializer, MARKER.deserializer, MARKER.validator]);
+  });
+
   it('costs almost nothing to import only an error helper', async () => {
     const code = await bundle(`
       import { flattenErrors } from CEREALE;
@@ -158,6 +179,22 @@ describe('tree-shaking', () => {
 
       expectShaken(code, [MARKER.isString], [MARKER.isLatitude, MARKER.isSemVer, MARKER.serializer]);
       expect(code.length).toBeLessThan(3000);
+    });
+
+    /**
+     * The source-level case above proves the `sideEffects` mechanism works; this one proves the
+     * two entries are spelled the way the published tree is laid out. `./src/index.ts` and
+     * `./dist/esm/index.js` are separate paths in the manifest, and a typo in either is invisible
+     * from the other side.
+     */
+    it.runIf(built)('installs Symbol.metadata from the published barrel too', async () => {
+      const code = await bundle(`
+        import { configure } from ${JSON.stringify(path.join(dist, 'esm/index.js'))};
+        export const f = (o) => configure(o);
+      `.replace('CEREALE', 'unused'));
+
+      expect(code, 'the Symbol.metadata install was pruned from dist/esm').toContain('Symbol.metadata');
+      expectShaken(code, [], [MARKER.isString, MARKER.serializer, MARKER.deserializer]);
     });
 
     it.runIf(built)('keeps its purity annotations through minification', async () => {

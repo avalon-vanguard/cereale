@@ -43,7 +43,7 @@ Measured, minified, across esbuild / rollup / webpack:
 
 | What you import | esbuild | rollup | webpack |
 | --- | ---: | ---: | ---: |
-| `flattenErrors` | 287 | 292 | 291 |
+| `flattenErrors` | 394 | 367 | 394 |
 | one decorator | 1,837 | 1,823 | 1,818 |
 | `validateSync` | 3,722 | 3,554 | 3,823 |
 | `toPlainSync` | 7,744 | 7,769 | 7,832 |
@@ -59,6 +59,22 @@ missed optimisation.
 names the rules that must not appear — and one case asserts that everything IS present when
 everything is used, so a "shaken" result cannot come from a bundle that failed to build. Strip
 the annotations and it fails with `"must be a latitude" should have been shaken out`.
+
+The same pass shook out something that was supposed to stay. Cereale installs `Symbol.metadata`
+when the runtime lacks it, and `sideEffects` named the module holding that install — but not the
+barrel that re-exports it. A side-effect-free barrel is droppable as a whole, so all three
+bundlers pruned the `export * from './metadata.js'` edge before metadata.js's own marking was
+ever consulted: `import { configure } from 'cereale'` came out at 145 bytes through esbuild, 143
+through webpack and 144 through rollup, with `Symbol.metadata` in none of them. That matters
+because `tsc`'s decorator emit reads the well-known symbol directly — `typeof Symbol ===
+"function" && Symbol.metadata ? Object.create(null) : void 0` — so without the install a
+decorated class gets `metadata: undefined`, which is to say no rules at all.
+
+`index.js` and `index.ts` are now listed too. It costs about 100 bytes, and only on imports that
+reach nothing else; every row of the table above except the first was byte-identical before and
+after, across all three bundlers. Two more cases in `treeshake.test.ts` pin it, one on the source
+and one on `dist/esm`, because those are separate paths in the manifest and a typo in either is
+invisible from the other side.
 
 ### Frameworks
 
