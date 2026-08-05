@@ -1,0 +1,89 @@
+name: Publish to npm
+
+# Deliberately manual. Pushing a tag does NOT publish — a tag is a decision to cut a release,
+# not a decision to make it public and immutable, and npm's 72-hour unpublish window makes the
+# second one hard to take back. Run this workflow from the Actions tab when you mean it.
+#
+# Before the first real run:
+#   1. Create an npm automation token and add it as the NPM_TOKEN repository secret.
+#   2. Run once with dry_run left as `true` and read the file list it prints.
+#   3. Run again with dry_run set to `false`.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Resolve and pack everything, but do not publish'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write        # required for npm provenance
+
+jobs:
+  publish:
+    name: ${{ inputs.dry_run && 'Dry run' || 'Publish' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The tag and the manifest disagreeing is the classic way to publish 0.3.0 as 0.2.0.
+      - name: Tag and package.json version must agree
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "package.json version: $VERSION"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "tag v$VERSION exists"
+          else
+            echo "::error::No tag v$VERSION. Tag the release commit before publishing."
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse "v$VERSION^{commit}")" ]; then
+            echo "::error::v$VERSION does not point at the commit being published."
+            exit 1
+          fi
+
+      - name: Refuse to republish a version already on the registry
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "::error::$NAME@$VERSION is already published. Bump the version."
+            exit 1
+          fi
+          echo "$NAME@$VERSION is not on the registry yet."
+
+      # The same gate that guards every push: type-check, lint, 259 tests, build, and the
+      # checks that the published types stand alone and the landing page has no CDN deps.
+      - name: Verify
+        run: npm run verify
+
+      - name: Show exactly what would ship
+        run: npm publish --dry-run
+
+      - name: Publish
+        if: ${{ inputs.dry_run == false }}
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Summary
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          {
+            echo "### cereale@$VERSION"
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              echo "Dry run — nothing was published."
+            else
+              echo "Published to https://www.npmjs.com/package/cereale/v/$VERSION"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

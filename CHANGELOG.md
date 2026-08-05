@@ -166,6 +166,25 @@ Serialization is a few percent slower for the representability check. Primitives
 inline, and arrays and dates skip it, so it costs one `Symbol.toStringTag` read per object.
 Validation is unchanged.
 
+### Packaging
+
+`files` was `["dist"]`, but `dist` carries 256 KB of `.js.map` and `.d.ts.map` files whose
+`sources` point at `../../src/*.ts` — which was not published. Every shipped sourcemap
+resolved to nothing: 44% of the tarball, dead. The source is only 116 KB and its comments are
+the most detailed explanation of why the engine does what it does, so it is now published
+(tests and the demo excluded) and the maps resolve. Stepping into cereale in a debugger, and
+"go to definition" from a decorator, both land in the real TypeScript.
+
+`CHANGELOG.md` ships too. The `repository`, `homepage` and `bugs` URLs said `Avalon-Vanguard`
+and only worked through GitHub's redirect; they now use the org's actual lowercase name.
+`publishConfig.access` is set explicitly so a future move to a scoped name cannot quietly
+attempt a private publish.
+
+A `Publish to npm` workflow is in place but deliberately manual — pushing a tag does not
+publish. It checks that the tag exists and points at the commit being published, refuses a
+version already on the registry, runs the full `verify` gate, prints the file list, and
+defaults to a dry run. Publishing needs an `NPM_TOKEN` secret and someone choosing to run it.
+
 ## [0.2.0] - 2026-08-04
 
 > The project stays on 0.x while nothing has been published: under semver that signals the

@@ -23,7 +23,11 @@
     "./dist/cjs/metadata.js"
   ],
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "CHANGELOG.md",
+    "!src/**/*.test.ts",
+    "!src/example.ts"
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json",
@@ -45,7 +49,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Avalon-Vanguard/cereale.git"
+    "url": "git+https://github.com/avalon-vanguard/cereale.git"
   },
   "keywords": [
     "json",
@@ -62,9 +66,9 @@
   "author": "Avalon Vanguard",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Avalon-Vanguard/cereale/issues"
+    "url": "https://github.com/avalon-vanguard/cereale/issues"
   },
-  "homepage": "https://github.com/Avalon-Vanguard/cereale#readme",
+  "homepage": "https://github.com/avalon-vanguard/cereale#readme",
   "devDependencies": {
     "@babel/standalone": "^8.0.4",
     "@eslint/js": "^10.0.1",
@@ -78,5 +82,8 @@
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.58.2",
     "vitest": "^4.1.4"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
