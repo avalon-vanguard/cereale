@@ -5,12 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-08-05
+## [0.1.0] - 2026-08-05
 
-The legacy-decorator line, promoted from 0.1.0 and now maintained in parallel with 2.x.
-Functionally identical to the previous unreleased state; only the version and the
-maintenance-line notice changed. See the 2.x branch for standard decorators and
-compile-time rule checking.
+The legacy-decorator line, now maintained in parallel with 0.2.x. Functionally identical
+to the previous state; only the maintenance-line notice was added. See the 0.2.x branch
+for standard decorators and compile-time rule checking.
+
+The project stays on 0.x while nothing has been published: under semver that signals the
+API may still move, which is honest for software with no real-world users yet. A breaking
+change is therefore a minor bump — 0.1.x to 0.2.x.
 
 
 ### Added
