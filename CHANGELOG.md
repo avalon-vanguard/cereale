@@ -5,7 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2026-08-04
+## [0.2.0] - 2026-08-04
+
+> The project stays on 0.x while nothing has been published: under semver that signals the
+> API may still move, which is honest for software with no real-world users. A breaking
+> change is therefore a minor bump, which is why this is 0.2.0 rather than 2.0.0.
 
 **Breaking.** Cereale moves to TC39 standard decorators, which is what makes validation rules
 type-checked against the fields they are attached to.
@@ -67,9 +71,9 @@ sync API — is unchanged.
 Standard decorators are transformed by `tsc` and by esbuild; **oxc does not implement them
 yet**. The library builds with `tsc` and consumers bundling with esbuild or Vite are fine, but
 the test runner (Vitest 4, which uses oxc) needs an esbuild transform plugin — see
-`vitest.config.ts`. Projects on an oxc-based toolchain should stay on 1.x for now.
+`vitest.config.ts`. Projects on an oxc-based toolchain should stay on 0.1.x for now.
 
-## [Unreleased] (released as 1.0.0)
+## [0.1.0] - 2026-08-05
 
 ### Added
 

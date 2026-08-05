@@ -76,7 +76,8 @@ Requires TypeScript 5.2+ and Node 20+. `reflect-metadata` is not needed and
 
 > **Toolchain note.** Standard decorators are transformed by `tsc` and by esbuild (so Vite
 > works). They are **not** yet transformed by oxc; if your toolchain uses it, decorator syntax
-> will fail to parse. v1.x, which uses legacy decorators, remains available for those setups.
+> will fail to parse. The 0.1.x line, which uses legacy decorators, remains available for
+> those setups.
 
 ## Quick Start
 
