@@ -328,7 +328,7 @@ await esbuild.build({
 
 ## A single file, no bundler
 
-`cereale/min` is the whole library flattened into one minified ES module (25.5 KB, 8.6 KB
+`cereale/min` is the whole library flattened into one minified ES module (33.9 KB, 9.6 KB
 gzipped) for import maps, `<script type="module">`, Deno and Workers.
 
 **If you are using a bundler, do not use it.** It is the whole library in one file, so nothing

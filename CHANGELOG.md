@@ -9,16 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### `cereale/min` — one file, no bundler
 
-The whole library flattened into a single minified ES module: **25.5 KB, 8.6 KB gzipped**, for
+The whole library flattened into a single minified ES module: **33.9 KB, 9.6 KB gzipped**, for
 import maps, `<script type="module">`, Deno and Workers. It is built from `dist/esm/index.js`,
 so the decorator lowering and the ES2025 target are whatever `tsc` produced — esbuild only
 flattens and minifies.
 
-It is an addition, not a replacement, and the measurement is why. Bundled through esbuild the
-flat and per-module builds produce consumer bundles within **2 bytes** of each other; through
-rollup + terser the flat one is 165 bytes smaller; unused decorators tree-shake out of both.
-Since the size argument is a wash, the per-module build stays the default `import` for the one
-thing it does better — readable stack traces for anyone not loading source maps.
+It is an addition, not a replacement. The per-module build stays the default `import`: it keeps
+readable stack traces for anyone not loading source maps, and it is what a bundler should be
+given.
+
+The flat file is minified for syntax and identifiers but **not** whitespace. Full minification
+strips comments — including the `/*#__PURE__*/` annotations below — which silently made
+`cereale/min` un-tree-shakable: one decorator came out at 5,066 bytes against 1,837 from the
+per-module entry, with all 26 unrelated rule messages back in the output. Keeping the
+annotations costs about a kilobyte gzipped and is asserted by the build.
 
 ### Tree-shaking
 
@@ -31,7 +35,9 @@ The cause is that every rule is a top-level call — `export const IsString = ru
 proves such a call side-effect-free by reading the factory, which is why rollup was already
 producing 1,823 bytes and hid the problem from a single-bundler measurement. esbuild and
 webpack will not do that analysis, and keep the call. Thirty declarations now carry
-`/*#__PURE__*/`, and all three bundlers land within 20 bytes of each other.
+`/*#__PURE__*/`. On the single-decorator import that exposed the problem the three bundlers now
+land within 19 bytes of each other; on larger imports they still differ by up to a few hundred,
+which is ordinary bundler variation rather than anything left unshaken.
 
 Measured, minified, across esbuild / rollup / webpack:
 

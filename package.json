@@ -24,8 +24,8 @@
   },
   "sideEffects": [
     "./dist/esm/metadata.js",
-    "./dist/cjs/metadata.js",
-    "./dist/cereale.min.js"
+    "./dist/cereale.min.js",
+    "./src/metadata.ts"
   ],
   "files": [
     "dist",

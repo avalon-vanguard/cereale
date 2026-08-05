@@ -27,8 +27,9 @@ user.greet();                            // your methods are still there
 
 **[avalon-vanguard.github.io/cereale](https://avalon-vanguard.github.io/cereale/)** — an
 interactive playground that runs this library in your browser, the full decorator reference,
-and the toolchain matrix. The page is self-contained and loads nothing from the network; it is
-served from `docs/` on `main`, and `npm run build:docs` rebuilds its assets to open locally.
+and the toolchain matrix. The page has no third-party dependencies — no CDN, no analytics, no webfonts; the only thing it
+fetches is its own vendored compiler, and only when you first press Run. It is served from
+`docs/` on `main`, and `npm run build:docs` rebuilds its assets to open locally.
 
 ## Where it fits
 
@@ -498,29 +499,38 @@ it is one `Symbol.toStringTag` read per object.
 
 Cereale tree-shakes. Every rule is declared so that a bundler can drop the ones you did not
 import, which matters for a library with 68 decorators — you pay for what you name and nothing
-else. Minified bytes, measured through three bundlers, and
-[pinned by a test](src/treeshake.test.ts) so it cannot quietly regress:
+else. Minified bytes, measured through esbuild, rollup and webpack. The table was measured by hand;
+what is [pinned by a test](src/treeshake.test.ts) is the property behind it — that a given
+import drops the parts of the library it does not reach — checked through esbuild on both the
+source and the published bundle:
 
 | What you import | esbuild | rollup | webpack |
 | --- | ---: | ---: | ---: |
 | `flattenErrors` | 287 | 292 | 291 |
 | one decorator | 1,837 | 1,823 | 1,818 |
-| `validateSync` | 3,722 | 3,554 | 3,823 |
-| `toPlainSync` | 7,744 | 7,769 | 7,832 |
-| `toInstanceSync` | 7,900 | 7,942 | 7,956 |
-| a typical DTO — 5 decorators, map, validate, format errors | 10,395 | 10,402 | 10,372 |
+| `validateSync` | 3,722 | 3,554 | 3,738 |
+| `toPlainSync` | 7,744 | 7,769 | 7,771 |
+| `toInstanceSync` | 7,900 | 7,942 | 7,944 |
+| a typical DTO — 5 decorators, map, validate, format errors | 10,395 | 10,402 | 10,360 |
 | the whole library | 26,266 | 25,671 | 26,879 |
 
 The serializer and the deserializer drop independently: read JSON and you do not pay for
 writing it. The validator is kept by both, because `validate` defaults to `true` and the entry
 points reference it whatever a given call site passes.
 
-This did not come for free. Every rule is a top-level call — `export const IsString = rule(…)` —
-and rollup can prove such a call side-effect-free by reading the factory, but esbuild and
-webpack will not. Without a `/*#__PURE__*/` annotation on each of them, importing one decorator
-pulled in the message and validator of all 68: **4,909 bytes instead of 1,837**. Nothing failed;
-the library was simply three times heavier in every consumer's bundle, and the only way to find
-out was to measure.
+This did not come for free. Thirty of the rules are declared as top-level calls —
+`export const IsString = rule(…)` — and rollup can prove such a call side-effect-free by reading
+the factory, but esbuild and webpack will not. Without a `/*#__PURE__*/` annotation on each of
+them, importing one decorator pulled in the message and validator of all 68: **4,909 bytes
+instead of 1,837**. Nothing failed; the library was simply three times heavier in every
+consumer's bundle, and the only way to find out was to measure. Note what that means for
+measuring: rollup alone would have shown nothing wrong.
+
+`cereale/min` tree-shakes too, which took a second fix — esbuild's `minify` strips comments,
+annotations included, so the flat bundle was silently reproducing the same bug (5,066 bytes for
+one decorator). It is now minified for syntax and identifiers but not whitespace: 33.9 KB raw,
+9.6 KB gzipped, about a kilobyte over the wire more than full minification would give. Still,
+if you are using a bundler, import from `cereale` rather than `cereale/min`.
 
 ## Notes and Limitations
 
