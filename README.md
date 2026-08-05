@@ -494,6 +494,34 @@ costs a few percent on `toPlain`, which is the price of never emitting `{}` wher
 used to be; primitives are handled inline and the check is skipped for arrays and dates, so
 it is one `Symbol.toStringTag` read per object.
 
+## Bundle size
+
+Cereale tree-shakes. Every rule is declared so that a bundler can drop the ones you did not
+import, which matters for a library with 68 decorators — you pay for what you name and nothing
+else. Minified bytes, measured through three bundlers, and
+[pinned by a test](src/treeshake.test.ts) so it cannot quietly regress:
+
+| What you import | esbuild | rollup | webpack |
+| --- | ---: | ---: | ---: |
+| `flattenErrors` | 287 | 292 | 291 |
+| one decorator | 1,837 | 1,823 | 1,818 |
+| `validateSync` | 3,722 | 3,554 | 3,823 |
+| `toPlainSync` | 7,744 | 7,769 | 7,832 |
+| `toInstanceSync` | 7,900 | 7,942 | 7,956 |
+| a typical DTO — 5 decorators, map, validate, format errors | 10,395 | 10,402 | 10,372 |
+| the whole library | 26,266 | 25,671 | 26,879 |
+
+The serializer and the deserializer drop independently: read JSON and you do not pay for
+writing it. The validator is kept by both, because `validate` defaults to `true` and the entry
+points reference it whatever a given call site passes.
+
+This did not come for free. Every rule is a top-level call — `export const IsString = rule(…)` —
+and rollup can prove such a call side-effect-free by reading the factory, but esbuild and
+webpack will not. Without a `/*#__PURE__*/` annotation on each of them, importing one decorator
+pulled in the message and validator of all 68: **4,909 bytes instead of 1,837**. Nothing failed;
+the library was simply three times heavier in every consumer's bundle, and the only way to find
+out was to measure.
+
 ## Notes and Limitations
 
 - **Rules are checked, types are not inferred.** You write both the field type and the rule;

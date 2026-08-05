@@ -329,10 +329,12 @@ await esbuild.build({
 ## A single file, no bundler
 
 `cereale/min` is the whole library flattened into one minified ES module (25.5 KB, 8.6 KB
-gzipped) for import maps, `<script type="module">`, Deno and Workers. Bundler users should keep
-the default entry point: measured through esbuild and through rollup + terser, the two produce
-consumer bundles within a couple of hundred bytes of each other and tree-shake identically, and
-the per-module build keeps readable stack traces.
+gzipped) for import maps, `<script type="module">`, Deno and Workers.
+
+**If you are using a bundler, do not use it.** It is the whole library in one file, so nothing
+can be dropped from it. The default entry point tree-shakes — one decorator costs about 1.8 KB
+against 26 KB for everything — and produces a smaller result in any real application. See
+[Bundle size](README.md#bundle-size).
 
 ```html
 <script type="importmap">

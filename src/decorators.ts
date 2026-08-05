@@ -262,17 +262,17 @@ export function ValidateNested(options?: ValidationOptions): FieldDecorator<obje
 // Type rules
 // ============================================================================
 
-export const IsString: Rule<string> = rule('isString', v => typeof v === 'string', p => `${p} must be a string`);
-export const IsNumber: Rule<number> = rule('isNumber', v => typeof v === 'number' && !isNaN(v), p => `${p} must be a number`);
-export const IsInt: Rule<number> = rule('isInt', v => Number.isInteger(v), p => `${p} must be an integer`);
-export const IsBoolean: Rule<boolean> = rule('isBoolean', v => typeof v === 'boolean', p => `${p} must be a boolean`);
-export const IsBigInt: Rule<bigint> = rule('isBigInt', v => typeof v === 'bigint', p => `${p} must be a bigint`);
-export const IsDate: Rule<Date> = rule('isDate', v => v instanceof Date && !isNaN(v.getTime()), p => `${p} must be a valid Date object`);
-export const IsObject: Rule<object> = rule('isObject', v => typeof v === 'object' && v !== null && !Array.isArray(v), p => `${p} must be an object`);
+export const IsString: Rule<string> = /*#__PURE__*/ rule('isString', v => typeof v === 'string', p => `${p} must be a string`);
+export const IsNumber: Rule<number> = /*#__PURE__*/ rule('isNumber', v => typeof v === 'number' && !isNaN(v), p => `${p} must be a number`);
+export const IsInt: Rule<number> = /*#__PURE__*/ rule('isInt', v => Number.isInteger(v), p => `${p} must be an integer`);
+export const IsBoolean: Rule<boolean> = /*#__PURE__*/ rule('isBoolean', v => typeof v === 'boolean', p => `${p} must be a boolean`);
+export const IsBigInt: Rule<bigint> = /*#__PURE__*/ rule('isBigInt', v => typeof v === 'bigint', p => `${p} must be a bigint`);
+export const IsDate: Rule<Date> = /*#__PURE__*/ rule('isDate', v => v instanceof Date && !isNaN(v.getTime()), p => `${p} must be a valid Date object`);
+export const IsObject: Rule<object> = /*#__PURE__*/ rule('isObject', v => typeof v === 'object' && v !== null && !Array.isArray(v), p => `${p} must be an object`);
 
-export const IsDefined: Rule<unknown> = rule('isDefined', v => v !== null && v !== undefined, p => `${p} should not be null or undefined`);
-export const IsNotEmpty: Rule<unknown> = rule('isNotEmpty', v => v !== null && v !== undefined && v !== '', p => `${p} should not be empty`);
-export const IsEmpty: Rule<unknown> = rule('isEmpty', v => {
+export const IsDefined: Rule<unknown> = /*#__PURE__*/ rule('isDefined', v => v !== null && v !== undefined, p => `${p} should not be null or undefined`);
+export const IsNotEmpty: Rule<unknown> = /*#__PURE__*/ rule('isNotEmpty', v => v !== null && v !== undefined && v !== '', p => `${p} should not be empty`);
+export const IsEmpty: Rule<unknown> = /*#__PURE__*/ rule('isEmpty', v => {
   if (v === null || v === undefined || v === '') return true;
   if (Array.isArray(v)) return v.length === 0;
   if (typeof v === 'object') return Object.keys(v).length === 0;
@@ -301,8 +301,8 @@ export function Max(max: number, options?: ValidationOptions): unknown {
   }), options);
 }
 
-export const Positive: Rule<number> = rule('positive', v => typeof v === 'number' && v > 0, p => `${p} must be positive`);
-export const Negative: Rule<number> = rule('negative', v => typeof v === 'number' && v < 0, p => `${p} must be negative`);
+export const Positive: Rule<number> = /*#__PURE__*/ rule('positive', v => typeof v === 'number' && v > 0, p => `${p} must be positive`);
+export const Negative: Rule<number> = /*#__PURE__*/ rule('negative', v => typeof v === 'number' && v < 0, p => `${p} must be negative`);
 
 export function IsDivisibleBy(divisor: number, options: EachValidationOptions): Each<number>;
 export function IsDivisibleBy(divisor: number, options?: ValidationOptions): One<number>;
@@ -315,13 +315,13 @@ export function IsDivisibleBy(divisor: number, options?: ValidationOptions): unk
 }
 
 /** An integer in 0..65535. Accepts a number or a numeric string. */
-export const IsPort: Rule<number | string> = rule('isPort', v => {
+export const IsPort: Rule<number | string> = /*#__PURE__*/ rule('isPort', v => {
   const n = typeof v === 'string' && v.trim() !== '' ? Number(v) : v;
   return typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 65535;
 }, p => `${p} must be a valid port number`);
 
-export const IsLatitude: Rule<number> = rule('isLatitude', v => typeof v === 'number' && Number.isFinite(v) && v >= -90 && v <= 90, p => `${p} must be a latitude between -90 and 90`);
-export const IsLongitude: Rule<number> = rule('isLongitude', v => typeof v === 'number' && Number.isFinite(v) && v >= -180 && v <= 180, p => `${p} must be a longitude between -180 and 180`);
+export const IsLatitude: Rule<number> = /*#__PURE__*/ rule('isLatitude', v => typeof v === 'number' && Number.isFinite(v) && v >= -90 && v <= 90, p => `${p} must be a latitude between -90 and 90`);
+export const IsLongitude: Rule<number> = /*#__PURE__*/ rule('isLongitude', v => typeof v === 'number' && Number.isFinite(v) && v >= -180 && v <= 180, p => `${p} must be a longitude between -180 and 180`);
 
 // ============================================================================
 // Strings
@@ -358,22 +358,22 @@ export function Length(min: number, max?: number, options?: ValidationOptions): 
   }), options);
 }
 
-export const Email: Rule<string> = pattern('isEmail', /^[^\s@]+@[^\s@]+\.[^\s@]+$/, p => `${p} must be a valid email`);
-export const IsAlpha: Rule<string> = pattern('isAlpha', /^[A-Za-z]+$/, p => `${p} must contain only letters`);
-export const IsAlphanumeric: Rule<string> = pattern('isAlphanumeric', /^[A-Za-z0-9]+$/, p => `${p} must contain only letters and numbers`);
-export const IsSemVer: Rule<string> = pattern('isSemVer', /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/, p => `${p} must be a valid semantic version`);
-export const IsHexColor: Rule<string> = pattern('isHexColor', /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i, p => `${p} must be a hex color`);
+export const Email: Rule<string> = /*#__PURE__*/ pattern('isEmail', /^[^\s@]+@[^\s@]+\.[^\s@]+$/, p => `${p} must be a valid email`);
+export const IsAlpha: Rule<string> = /*#__PURE__*/ pattern('isAlpha', /^[A-Za-z]+$/, p => `${p} must contain only letters`);
+export const IsAlphanumeric: Rule<string> = /*#__PURE__*/ pattern('isAlphanumeric', /^[A-Za-z0-9]+$/, p => `${p} must contain only letters and numbers`);
+export const IsSemVer: Rule<string> = /*#__PURE__*/ pattern('isSemVer', /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/, p => `${p} must be a valid semantic version`);
+export const IsHexColor: Rule<string> = /*#__PURE__*/ pattern('isHexColor', /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i, p => `${p} must be a hex color`);
 
-export const IsLowercase: Rule<string> = rule('isLowercase', v => typeof v === 'string' && v === v.toLowerCase(), p => `${p} must be lowercase`);
-export const IsUppercase: Rule<string> = rule('isUppercase', v => typeof v === 'string' && v === v.toUpperCase(), p => `${p} must be uppercase`);
-export const IsNumberString: Rule<string> = rule('isNumberString', v => typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)), p => `${p} must be a number string`);
-export const IsDateString: Rule<string> = rule('isDateString', v => typeof v === 'string' && !isNaN(Date.parse(v)), p => `${p} must be a valid ISO 8601 date string`);
-export const IsJSON: Rule<string> = rule('isJson', v => {
+export const IsLowercase: Rule<string> = /*#__PURE__*/ rule('isLowercase', v => typeof v === 'string' && v === v.toLowerCase(), p => `${p} must be lowercase`);
+export const IsUppercase: Rule<string> = /*#__PURE__*/ rule('isUppercase', v => typeof v === 'string' && v === v.toUpperCase(), p => `${p} must be uppercase`);
+export const IsNumberString: Rule<string> = /*#__PURE__*/ rule('isNumberString', v => typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)), p => `${p} must be a number string`);
+export const IsDateString: Rule<string> = /*#__PURE__*/ rule('isDateString', v => typeof v === 'string' && !isNaN(Date.parse(v)), p => `${p} must be a valid ISO 8601 date string`);
+export const IsJSON: Rule<string> = /*#__PURE__*/ rule('isJson', v => {
   if (typeof v !== 'string') return false;
   try { JSON.parse(v); return true; } catch { return false; }
 }, p => `${p} must be a JSON string`);
 
-export const IsUrl: Rule<string> = rule('isUrl', v => {
+export const IsUrl: Rule<string> = /*#__PURE__*/ rule('isUrl', v => {
   try { new URL(v as string); return true; } catch { return false; }
 }, p => `${p} must be a valid URL`);
 
@@ -449,10 +449,10 @@ function affix(name: string, test: (value: string, seed: string) => boolean, des
   return decorator;
 }
 
-export const Contains = affix('contains', (v, s) => v.includes(s), (p, s) => `${p} must contain ${JSON.stringify(s)}`);
-export const NotContains = affix('notContains', (v, s) => !v.includes(s), (p, s) => `${p} must not contain ${JSON.stringify(s)}`);
-export const StartsWith = affix('startsWith', (v, s) => v.startsWith(s), (p, s) => `${p} must start with ${JSON.stringify(s)}`);
-export const EndsWith = affix('endsWith', (v, s) => v.endsWith(s), (p, s) => `${p} must end with ${JSON.stringify(s)}`);
+export const Contains = /*#__PURE__*/ affix('contains', (v, s) => v.includes(s), (p, s) => `${p} must contain ${JSON.stringify(s)}`);
+export const NotContains = /*#__PURE__*/ affix('notContains', (v, s) => !v.includes(s), (p, s) => `${p} must not contain ${JSON.stringify(s)}`);
+export const StartsWith = /*#__PURE__*/ affix('startsWith', (v, s) => v.startsWith(s), (p, s) => `${p} must start with ${JSON.stringify(s)}`);
+export const EndsWith = /*#__PURE__*/ affix('endsWith', (v, s) => v.endsWith(s), (p, s) => `${p} must end with ${JSON.stringify(s)}`);
 
 // ============================================================================
 // Equality and membership

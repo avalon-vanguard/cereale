@@ -20,6 +20,40 @@ rollup + terser the flat one is 165 bytes smaller; unused decorators tree-shake 
 Since the size argument is a wash, the per-module build stays the default `import` for the one
 thing it does better — readable stack traces for anyone not loading source maps.
 
+### Tree-shaking
+
+Importing one decorator pulled in the message and validator of all 68. **4,909 bytes instead of
+1,837** through esbuild, 4,823 instead of 1,818 through webpack. Nothing failed and nothing
+warned; the library was simply about three times heavier than it needed to be in every
+consumer's bundle.
+
+The cause is that every rule is a top-level call — `export const IsString = rule(…)`. rollup
+proves such a call side-effect-free by reading the factory, which is why rollup was already
+producing 1,823 bytes and hid the problem from a single-bundler measurement. esbuild and
+webpack will not do that analysis, and keep the call. Thirty declarations now carry
+`/*#__PURE__*/`, and all three bundlers land within 20 bytes of each other.
+
+Measured, minified, across esbuild / rollup / webpack:
+
+| What you import | esbuild | rollup | webpack |
+| --- | ---: | ---: | ---: |
+| `flattenErrors` | 287 | 292 | 291 |
+| one decorator | 1,837 | 1,823 | 1,818 |
+| `validateSync` | 3,722 | 3,554 | 3,823 |
+| `toPlainSync` | 7,744 | 7,769 | 7,832 |
+| `toInstanceSync` | 7,900 | 7,942 | 7,956 |
+| a typical DTO | 10,395 | 10,402 | 10,372 |
+| everything | 26,266 | 25,671 | 26,879 |
+
+The serializer and deserializer drop independently. The validator is kept by both mapping
+entry points because `validate` defaults to `true`, which is a real reference rather than a
+missed optimisation.
+
+`src/treeshake.test.ts` pins it. The assertions are mostly about content rather than bytes — it
+names the rules that must not appear — and one case asserts that everything IS present when
+everything is used, so a "shaken" result cannot come from a bundle that failed to build. Strip
+the annotations and it fails with `"must be a latitude" should have been shaken out`.
+
 ### Frameworks
 
 [FRAMEWORKS.md](FRAMEWORKS.md) — a setup recipe for each, every one run before it was written,
