@@ -26,6 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Tags are not fetched at the default depth, and the version gate below
+          # resolves one — without this it fails on every release, tag or no tag.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
