@@ -1,7 +1,7 @@
 {
   "name": "cereale",
-  "version": "0.2.0",
-  "description": "Strongly typed JSON mapping and validation for TypeScript classes — validated domain objects, not validated data",
+  "version": "0.3.0",
+  "description": "Strongly typed JSON mapping and validation for TypeScript classes — validated domain objects, not validated data. A zero-dependency replacement for class-validator + class-transformer, on TC39 standard decorators.",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -11,6 +11,11 @@
       "types": "./dist/esm/index.d.ts",
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
+    },
+    "./vite": {
+      "types": "./dist/esm/vite.d.ts",
+      "import": "./dist/esm/vite.js",
+      "require": "./dist/cjs/vite.js"
     }
   },
   "sideEffects": [
@@ -44,11 +49,13 @@
     "json",
     "validation",
     "decorators",
+    "standard-decorators",
     "typescript",
-    "zod-alternative",
     "dto",
     "serialization",
-    "class-validator"
+    "class-validator",
+    "class-transformer",
+    "class-validator-alternative"
   ],
   "author": "Avalon Vanguard",
   "license": "MIT",
@@ -58,6 +65,7 @@
   "homepage": "https://github.com/Avalon-Vanguard/cereale#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@swc/core": "^1.15.47",
     "@types/node": "^25.6.0",
     "@vitest/coverage-v8": "^4.1.4",
     "esbuild": "^0.25.0",

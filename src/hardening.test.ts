@@ -219,3 +219,44 @@ describe('validate() accepts options', () => {
     expect(await validate(order)).toHaveLength(1);
   });
 });
+
+describe('decorator context guards', () => {
+  // Every decorator resolves its metadata through one checkpoint, so one representative
+  // decorator per shape is enough to cover the rule.
+  const shapes: [string, unknown][] = [
+    ['a method', { kind: 'method', name: 'run', metadata: {} }],
+    ['a getter', { kind: 'getter', name: 'total', metadata: {} }],
+    ['an accessor', { kind: 'accessor', name: 'value', metadata: {} }],
+    ['a class', { kind: 'class', name: 'Thing', metadata: {} }],
+  ];
+
+  for (const [label, context] of shapes) {
+    it(`refuses being applied to ${label}`, () => {
+      expect(() => (IsString() as any)(undefined, context)).toThrow(/apply to fields/);
+    });
+  }
+
+  it('explains why `accessor` in particular cannot work', () => {
+    const context = { kind: 'accessor', name: 'value', metadata: {} };
+    expect(() => (IsString() as any)(undefined, context)).toThrow(/private slot/);
+  });
+
+  it('refuses a legacy decorator call shape', () => {
+    // What `experimentalDecorators: true` emits: (prototype, propertyKey).
+    expect(() => (IsString() as any)({}, 'name')).toThrow(/experimentalDecorators/);
+  });
+
+  it('refuses a standard context that carries no metadata', () => {
+    const context = { kind: 'field', name: 'value', metadata: undefined };
+    expect(() => (IsString() as any)(undefined, context)).toThrow(/no metadata object/);
+  });
+
+  it('names the field it could not record', () => {
+    const context = { kind: 'field', name: 'nickname', metadata: null };
+    expect(() => (IsString() as any)(undefined, context)).toThrow(/"nickname"/);
+  });
+
+  it('guards the mapping decorators too, not just the rules', () => {
+    expect(() => (JsonSerialize(class {} as any) as any)({}, 'name')).toThrow(/experimentalDecorators/);
+  });
+});

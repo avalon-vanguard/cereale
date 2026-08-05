@@ -126,6 +126,58 @@ function ownModel(metadata: DecoratorMetadata): ClassModel {
   return (metadata as Record<symbol, ClassModel>)[MODEL]!;
 }
 
+/**
+ * Validates a decorator context and returns the metadata object to record into.
+ *
+ * Every decorator goes through here rather than reading `context.metadata` directly, because
+ * each of the three failures below is a configuration mistake with a one-line fix, and the
+ * error you get without the check — `TypeError: Cannot convert undefined or null to object`,
+ * raised somewhere inside cereale — points at none of them.
+ *
+ * Typed as `unknown` deliberately: the whole point is to inspect a context that may not have
+ * the shape the type says it has, because it came from the wrong decorator transform.
+ */
+export function fieldMetadata(context: unknown): DecoratorMetadata {
+  const ctx = context as { kind?: unknown; name?: unknown; metadata?: unknown } | null | undefined;
+
+  // A legacy (`experimentalDecorators: true`) field decorator is invoked as
+  // `(prototype, "propertyName")`, so the second argument is a string, not a context object.
+  if (typeof ctx !== 'object' || ctx === null || typeof ctx.kind !== 'string') {
+    throw new TypeError(
+      'cereale needs TC39 standard decorators, but the compiler emitted legacy ones. ' +
+      'Set "experimentalDecorators": false in tsconfig.json (and drop "emitDecoratorMetadata"). ' +
+      'The two decorator systems cannot coexist in one program, so a project that still needs ' +
+      'legacy decorators for another library cannot use cereale yet.'
+    );
+  }
+
+  if (ctx.kind !== 'field') {
+    throw new TypeError(
+      `cereale decorators apply to fields, but this one was applied to a ${ctx.kind}.` +
+      (ctx.kind === 'accessor'
+        ? ' An `accessor` field keeps its value in a private slot that mapping and validation ' +
+          'cannot reach — declare it as a plain field instead.'
+        : '')
+    );
+  }
+
+  // Standard decorators are specified to always carry a metadata object, but the emitted
+  // helpers create it conditionally: tsc writes `Symbol.metadata ? Object.create(...) : void 0`.
+  // Importing cereale installs the `Symbol.metadata` fallback, so this only fires if the
+  // decorated class somehow evaluates first.
+  if (typeof ctx.metadata !== 'object' || ctx.metadata === null) {
+    throw new TypeError(
+      `The decorator context for "${String(ctx.name)}" carries no metadata object, so cereale ` +
+      'has nowhere to record the rule. The compiler emitted its decorator helpers without ' +
+      'metadata support: make sure cereale is imported before the decorated class is evaluated ' +
+      '(importing it installs the Symbol.metadata fallback) and that the build targets ES2022 ' +
+      'or later.'
+    );
+  }
+
+  return ctx.metadata as DecoratorMetadata;
+}
+
 /** Returns (creating if needed) the model entry for one field. */
 export function propertyModel(metadata: DecoratorMetadata, property: string): PropertyModel {
   version++;
@@ -181,6 +233,13 @@ export function defineRule<T>(
   options?: ValidationOptions
 ): void {
   const holder = clazz as unknown as Record<symbol, DecoratorMetadata | undefined>;
-  holder[METADATA_KEY] ??= Object.create(null) as DecoratorMetadata;
+  // `hasOwn`, not `??=`: a subclass with no decorators of its own *inherits* its base's
+  // metadata object through the static side of the prototype chain, and `??=` would find it
+  // non-nullish and write the rule straight into the base. Creating an own object that
+  // prototype-chains to the inherited one is what the decorator transform itself does, and it
+  // is what lets `ownModel` copy-on-write the base's rules instead of mutating them.
+  if (!Object.hasOwn(holder, METADATA_KEY)) {
+    holder[METADATA_KEY] = Object.create(holder[METADATA_KEY] ?? null) as DecoratorMetadata;
+  }
   addConstraint(holder[METADATA_KEY]!, property, constraint, options);
 }

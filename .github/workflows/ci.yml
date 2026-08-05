@@ -37,5 +37,7 @@ jobs:
       run: |
         node --input-type=module -e "import * as m from './dist/esm/index.js'; if (typeof m.toInstance !== 'function') throw new Error('ESM entry point broken');"
         node --input-type=commonjs -e "const m = require('./dist/cjs/index.js'); if (typeof m.toInstance !== 'function') throw new Error('CJS entry point broken');"
+        node --input-type=module -e "import { standardDecorators } from './dist/esm/vite.js'; if (standardDecorators().enforce !== 'pre') throw new Error('ESM cereale/vite broken');"
+        node --input-type=commonjs -e "const { standardDecorators } = require('./dist/cjs/vite.js'); if (standardDecorators().enforce !== 'pre') throw new Error('CJS cereale/vite broken');"
     - name: Run Demo
       run: npm run demo

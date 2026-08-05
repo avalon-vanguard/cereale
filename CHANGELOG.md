@@ -5,6 +5,90 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-05
+
+Every change here comes from the same question: where does cereale currently fail *quietly*?
+Three answers, each of which cost a real user nothing to hit and everything to diagnose.
+
+### Vite 8 and Vitest 4 silently drop decorators — `cereale/vite`
+
+Both transform TypeScript with oxc, which does not implement the standard decorator transform
+and does not say so. It leaves the syntax in the output, so:
+
+- `vitest` reports `0 test` next to a bare `SyntaxError`
+- `vite build` reports **success**, having emitted a bundle that throws the moment it is imported
+
+Cereale now ships the plugin that fixes it:
+
+```ts
+// vite.config.ts / vitest.config.ts
+import { standardDecorators } from 'cereale/vite';
+
+export default defineConfig({ plugins: [standardDecorators()] });
+```
+
+It transforms with esbuild, falling back to the TypeScript compiler; cereale depends on
+neither, and says which to install if somehow neither is present. Options: `include`,
+`target`, and `transformer` to pin one deliberately. The library's own test suite runs
+through it, so it is exercised by every test rather than by one test about itself.
+
+### Legacy decorators now say so
+
+With `experimentalDecorators: true` — still the default in most existing TypeScript projects,
+because class-validator required it — decorators are invoked as `(prototype, "name")` and
+cereale died with `TypeError: Cannot convert undefined or null to object`, which names neither
+the cause nor the fix. Every decorator now resolves its metadata through one checkpoint that
+raises an error naming the tsconfig setting instead. The same checkpoint rejects application
+to a method, getter or `accessor` field, all of which previously recorded metadata that
+nothing would ever read.
+
+### Values JSON cannot carry are refused, not emptied
+
+A populated `Map` serialized to `{}`. A `Set` serialized to `{}`. A `Uint8Array` to
+`{"0":1,"1":2}`. A `bigint` passed straight through, so the caller's own `JSON.stringify`
+threw somewhere unrelated. `RegExp`, `Error`, `Promise`, `WeakMap`, `DataView`, symbols and
+functions all had their own version of the same failure. All of them now raise a
+`JsonMappingError` that names the property path and the two ways out:
+
+```
+JsonMappingError: lines[1].tags[0] is a Set, which cannot be serialized to JSON.
+Give the property a @JsonSerialize() serializer that converts it, or drop it from the
+output with @JsonIgnore().
+```
+
+The check also covers what a `@JsonSerialize` serializer hands back, sync or async. This is
+**breaking** for anyone relying on the old behaviour, though "relying on" is a strong word for
+losing data without being told.
+
+Circular-reference and depth-limit errors now name the path too (`at child.parent`), which
+came free with the bookkeeping.
+
+### Fixed
+
+- `defineRule` on a subclass with no decorators of its own wrote the rule into its **base
+  class**, because the base's metadata object is inherited through the static prototype chain
+  and `??=` found it non-nullish. Every sibling subclass then inherited a rule meant for one
+  of them.
+- The plugin's TypeScript path emitted a `//# sourceMappingURL=` comment pointing at a file
+  nobody wrote, which Vite followed and failed to read on every transformed module.
+
+### Positioning
+
+`zod-alternative` is out of the keywords, and the README leads with the comparison that
+actually applies: cereale replaces **class-validator + class-transformer**. It does not infer
+types from schemas, and framing it against Zod invited exactly the objection that it is
+missing `z.infer` — which is a different design, not a gap.
+
+The README's toolchain support table (`tsc`, esbuild, swc ✅, oxc ❌) is now
+[executed by a test](src/toolchain.test.ts): each row compiles a decorated class with that
+tool and asserts the metadata arrived, so the table cannot quietly go stale.
+
+### Performance
+
+Serialization is a few percent slower for the representability check. Primitives are handled
+inline, and arrays and dates skip it, so it costs one `Symbol.toStringTag` read per object.
+Validation is unchanged.
+
 ## [0.2.0] - 2026-08-04
 
 > The project stays on 0.x while nothing has been published: under semver that signals the

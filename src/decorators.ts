@@ -2,7 +2,7 @@ import type {
   ClassConstructor, FieldDecorator, JsonDeserializer, JsonSerializer,
 } from './interfaces.js';
 import {
-  addConstraint, propertyModel,
+  addConstraint, fieldMetadata, propertyModel,
   type EachValidationOptions, type PolymorphicInfo, type ValidationArguments,
   type ValidationConstraint, type ValidationOptions, type ValidatorConstraintInterface,
 } from './metadata.js';
@@ -35,7 +35,7 @@ function decorate(
 ): FieldDecorator<unknown> {
   return ((_target: undefined, context: ClassFieldDecoratorContext) => {
     const property = String(context.name);
-    addConstraint(context.metadata, property, build(property), options);
+    addConstraint(fieldMetadata(context), property, build(property), options);
   }) as FieldDecorator<unknown>;
 }
 
@@ -72,7 +72,7 @@ function pattern(name: string, regex: RegExp, message: (property: string) => str
  */
 export function JsonProperty(name: string): FieldDecorator<unknown> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {
-    propertyModel(context.metadata, String(context.name)).name = name;
+    propertyModel(fieldMetadata(context), String(context.name)).name = name;
   }) as FieldDecorator<unknown>;
 }
 
@@ -84,14 +84,14 @@ export function JsonProperty(name: string): FieldDecorator<unknown> {
  */
 export function JsonAlias(...names: string[]): FieldDecorator<unknown> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {
-    const model = propertyModel(context.metadata, String(context.name));
+    const model = propertyModel(fieldMetadata(context), String(context.name));
     model.aliases = [...(model.aliases ?? []), ...names];
   }) as FieldDecorator<unknown>;
 }
 
 function access(value: 'none' | 'readonly' | 'writeonly'): FieldDecorator<unknown> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {
-    propertyModel(context.metadata, String(context.name)).access = value;
+    propertyModel(fieldMetadata(context), String(context.name)).access = value;
   }) as FieldDecorator<unknown>;
 }
 
@@ -123,7 +123,7 @@ export function JsonSerialize<T>(
   serializer: ClassConstructor<JsonSerializer<T, any>>
 ): FieldDecorator<T | null | undefined> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {
-    propertyModel(context.metadata, String(context.name)).serializer = serializer;
+    propertyModel(fieldMetadata(context), String(context.name)).serializer = serializer;
   }) as FieldDecorator<T | null | undefined>;
 }
 
@@ -137,7 +137,7 @@ export function JsonDeserialize<R>(
   deserializer: ClassConstructor<JsonDeserializer<any, R>>
 ): FieldDecorator<R | null | undefined> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {
-    propertyModel(context.metadata, String(context.name)).deserializer = deserializer;
+    propertyModel(fieldMetadata(context), String(context.name)).deserializer = deserializer;
   }) as FieldDecorator<R | null | undefined>;
 }
 
@@ -151,7 +151,7 @@ export function JsonType<T extends object>(
   typeFunction: () => ClassConstructor<T>
 ): FieldDecorator<T | readonly T[] | null | undefined> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {
-    propertyModel(context.metadata, String(context.name)).type = typeFunction;
+    propertyModel(fieldMetadata(context), String(context.name)).type = typeFunction;
   }) as FieldDecorator<T | readonly T[] | null | undefined>;
 }
 
@@ -194,7 +194,7 @@ export function JsonPolymorphic<Base extends object = object>(
       onUnknown: options?.onUnknown ?? 'keep',
       ...(options?.fallback ? { fallback: options.fallback as ClassConstructor<any> } : {}),
     };
-    propertyModel(context.metadata, String(context.name)).polymorphic = info;
+    propertyModel(fieldMetadata(context), String(context.name)).polymorphic = info;
   }) as FieldDecorator<Base | readonly Base[] | null | undefined>;
 }
 
@@ -205,7 +205,7 @@ export function JsonPolymorphic<Base extends object = object>(
 /** Skips every other rule on this field when the value is `null` or `undefined`. */
 export function IsOptional(): FieldDecorator<unknown> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {
-    propertyModel(context.metadata, String(context.name)).optional = true;
+    propertyModel(fieldMetadata(context), String(context.name)).optional = true;
   }) as FieldDecorator<unknown>;
 }
 
@@ -221,7 +221,7 @@ export function IsOptional(): FieldDecorator<unknown> {
  */
 export function ValidateIf<This>(condition: (object: This) => boolean): FieldDecorator<unknown> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {
-    propertyModel(context.metadata, String(context.name)).condition = condition as (o: any) => boolean;
+    propertyModel(fieldMetadata(context), String(context.name)).condition = condition as (o: any) => boolean;
   }) as FieldDecorator<unknown>;
 }
 
@@ -233,7 +233,7 @@ export function ValidateIf<This>(condition: (object: This) => boolean): FieldDec
  */
 export function Allow(): FieldDecorator<unknown> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {
-    propertyModel(context.metadata, String(context.name));
+    propertyModel(fieldMetadata(context), String(context.name));
   }) as FieldDecorator<unknown>;
 }
 
@@ -244,10 +244,11 @@ export function Allow(): FieldDecorator<unknown> {
  */
 export function ValidateNested(options?: ValidationOptions): FieldDecorator<object | readonly unknown[] | null | undefined> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {
+    const metadata = fieldMetadata(context);
     const property = String(context.name);
-    propertyModel(context.metadata, property).nested = true;
+    propertyModel(metadata, property).nested = true;
     if (options?.each) {
-      addConstraint(context.metadata, property, {
+      addConstraint(metadata, property, {
         name: 'nestedEach',
         validate: v => Array.isArray(v),
         message: `${property} must be an array`,

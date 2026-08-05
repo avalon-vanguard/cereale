@@ -25,22 +25,30 @@ const user = fromJsonSync(User, body);   // a real User
 user.greet();                            // your methods are still there
 ```
 
-## Why not Zod?
+## Where it fits
 
-Zod is excellent, and if a plain validated object is what you want, use it. The difference is
-what you get back:
+The stack Cereale replaces is **class-validator + class-transformer**:
+
+| | class-validator + class-transformer | Cereale |
+| --- | --- | --- |
+| Packages to install | 2, plus `reflect-metadata` | 1, no runtime dependencies |
+| Decorators | legacy (`experimentalDecorators`) | TC39 standard |
+| Rules checked against the field | no — `@IsInt() name: string` compiles | **yes, at compile time** |
+| Mapping and validation | two libraries that must agree | one model |
+
+The comparison people ask about is **Zod**, and it is worth being precise about, because
+Cereale is not a drop-in for it:
 
 | | Zod | Cereale |
 | --- | --- | --- |
 | Result of parsing | an anonymous object matching a schema | an instance of **your class** |
 | Methods, getters, inheritance | none — data only | preserved |
 | Where the type comes from | inferred from the schema | your class declaration |
-| Rules checked against the type | not applicable — schema *is* the type | **yes, at compile time** |
 | Bidirectional mapping (renaming both ways) | not the focus | first-class |
 
-Cereale does not infer your type from a schema, so you still write the field type and the rule.
-What it guarantees is that **the two cannot disagree** — `@IsInt() name!: string` does not
-compile. That is the guarantee class-validator has never offered.
+Cereale does **not** infer your type from a schema. You write the field type and the rule, and
+what it guarantees is that **the two cannot disagree** — `@IsInt() name!: string` does not
+compile. If you want `z.infer`, you want Zod; that is a different design, not a missing feature.
 
 Reach for Cereale when your domain model is already a class — a NestJS provider, a TypeORM
 entity, anything with behaviour attached. Reach for Zod when you just want the data.
@@ -51,6 +59,8 @@ entity, anything with behaviour attached. Reach for Zod when you just want the d
 - **Real instances:** nested objects, polymorphic subtypes and arrays all come back as classes.
 - **Field-name mapping:** `@JsonProperty`, `@JsonAlias` and naming strategies, both directions.
 - **Access control:** keep passwords out of responses and server-owned ids out of requests.
+- **Nothing fails quietly:** a misconfigured compiler, a cycle, or a value JSON cannot carry
+  raises an error that names the cause — never an empty object.
 - **Sync and async:** every entry point has a synchronous twin.
 - **Zero dependencies**, ESM + CJS, Node 20+.
 
@@ -60,7 +70,7 @@ entity, anything with behaviour attached. Reach for Zod when you just want the d
 npm install cereale
 ```
 
-Cereale v2 uses **TC39 standard decorators**, so no `experimentalDecorators` flag:
+Cereale uses **TC39 standard decorators** (since 0.2.0), so no `experimentalDecorators` flag:
 
 ```json
 {
@@ -74,10 +84,44 @@ Cereale v2 uses **TC39 standard decorators**, so no `experimentalDecorators` fla
 Requires TypeScript 5.2+ and Node 20+. `reflect-metadata` is not needed and
 `emitDecoratorMetadata` is not read.
 
-> **Toolchain note.** Standard decorators are transformed by `tsc` and by esbuild (so Vite
-> works). They are **not** yet transformed by oxc; if your toolchain uses it, decorator syntax
-> will fail to parse. The 0.1.x line, which uses legacy decorators, remains available for
-> those setups.
+`experimentalDecorators` must be **off**. The two decorator systems cannot coexist in one
+program, so a project that still needs legacy decorators for another library cannot use
+Cereale yet. If yours is configured for them, you get an error saying exactly that rather
+than a `TypeError` from somewhere inside the engine.
+
+### Toolchain support
+
+Whether Cereale works at all depends on your compiler emitting standard decorators, so this
+table is [checked by a test](src/toolchain.test.ts) rather than asserted here:
+
+| Transformer | Status | Notes |
+| --- | --- | --- |
+| `tsc` | ✅ | With `experimentalDecorators: false` and `target: ES2022`+ |
+| esbuild | ✅ | Same settings via `tsconfigRaw` |
+| swc | ✅ | `jsc.transform.decoratorVersion: "2022-03"` |
+| **oxc** | ❌ | Used by **Vite 8** and **Vitest 4** — see below |
+
+**If you are on Vite 8 or Vitest 4**, oxc leaves decorator syntax in the output without
+reporting anything: `vitest` prints `0 test` next to a bare `SyntaxError`, and `vite build`
+reports success while emitting a bundle that throws the moment it is imported. Cereale ships
+the plugin that fixes it:
+
+```ts
+// vite.config.ts / vitest.config.ts
+import { defineConfig } from 'vite';
+import { standardDecorators } from 'cereale/vite';
+
+export default defineConfig({
+  plugins: [standardDecorators()],
+});
+```
+
+It transforms `.ts`, `.mts` and `.cts` outside `node_modules` with esbuild, falling back to
+the TypeScript compiler if esbuild is not installed — Cereale depends on neither. Pass
+`include` to widen or narrow the set (decorated classes in `.tsx` files need this),
+`transformer: 'esbuild' | 'typescript'` to pin one, or `target` to change the output level
+from the default `es2022`. Nothing in the plugin is specific to Cereale; delete it once oxc
+implements the transform.
 
 ## Quick Start
 
@@ -424,6 +468,11 @@ against `JSON.parse` + `JSON.stringify` (5.8 us) on the same machine:
 If you validate at the edge and map internally afterwards, `{ validate: false }` skips the
 dominant cost.
 
+Serialization also checks every value it walks against the set JSON cannot represent. That
+costs a few percent on `toPlain`, which is the price of never emitting `{}` where a `Map`
+used to be; primitives are handled inline and the check is skipped for arrays and dates, so
+it is one `Symbol.toStringTag` read per object.
+
 ## Notes and Limitations
 
 - **Rules are checked, types are not inferred.** You write both the field type and the rule;
@@ -431,10 +480,24 @@ dominant cost.
   model, not this one.
 - **`abstract` fields cannot be decorated.** Standard decorators do not apply to abstract
   members. Declare the field concretely in the base class instead.
-- **oxc does not transform standard decorators yet.** `tsc` and esbuild do.
+- **`accessor` fields cannot be decorated.** Their value lives in a private slot that mapping
+  and validation cannot reach. Applying a decorator to one is an error, not a silent no-op.
+- **oxc does not transform standard decorators yet.** `tsc`, esbuild and swc do — see
+  [Toolchain support](#toolchain-support) for the Vite/Vitest plugin.
+- **Values JSON cannot carry are rejected**, not quietly dropped. `Map`, `Set`, `RegExp`,
+  `Error`, typed arrays, `bigint`, `symbol` and functions all raise a `JsonMappingError` naming
+  the property path:
 
-- **Circular references** are rejected during serialization with a `JsonMappingError`. Break
-  the cycle with `@JsonIgnore()` on the back-reference.
+  ```
+  JsonMappingError: lines[1].tags[0] is a Set, which cannot be serialized to JSON.
+  Give the property a @JsonSerialize() serializer that converts it, or drop it from the
+  output with @JsonIgnore().
+  ```
+
+  Serializing a populated `Map` to `{}` and returning success is the failure mode this
+  library exists to prevent, so it does not do it either.
+- **Circular references** are rejected during serialization with a `JsonMappingError` that
+  names where the cycle closed. Break it with `@JsonIgnore()` on the back-reference.
 - **`validate()` on a plain object** returns no errors: rules live on the class, so validate
   the instance you get back from `toInstance`, not the raw payload.
 - **Renaming is not backwards-compatible by itself.** Once a property carries

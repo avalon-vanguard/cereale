@@ -242,14 +242,113 @@ function refuseAsync(deferred: Deferred, operation: string, asyncName: string): 
   );
 }
 
-function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: number, deferred: Deferred): any {
-  if (obj === null || obj === undefined || typeof obj !== 'object') {
+/**
+ * Values that carry their data in internal slots rather than in own enumerable properties.
+ *
+ * Walking one of these with `Object.keys` yields `{}` — a populated `Map` becomes an empty
+ * object and nothing anywhere says so. Keyed by `Symbol.toStringTag`, which every one of them
+ * defines on its prototype, so the lookup costs a single property read and still recognises
+ * instances that came from another realm.
+ */
+const UNREPRESENTABLE: Record<string, string> = {
+  Map: 'a Map',
+  Set: 'a Set',
+  WeakMap: 'a WeakMap',
+  WeakSet: 'a WeakSet',
+  WeakRef: 'a WeakRef',
+  Promise: 'a Promise',
+  ArrayBuffer: 'an ArrayBuffer',
+  SharedArrayBuffer: 'a SharedArrayBuffer',
+  DataView: 'a DataView',
+  Generator: 'a generator',
+  AsyncGenerator: 'an async generator',
+};
+
+/**
+ * Describes why a value cannot be represented in JSON, or returns null if it can.
+ *
+ * The alternative to raising this is what the engine used to do: emit `{}` for a `Map`,
+ * index-keyed noise for a `Uint8Array`, and a bigint that makes the caller's own
+ * `JSON.stringify` throw somewhere else entirely. This library's position is that silent
+ * success is the worst failure mode a mapping layer can have, and that has to include its own.
+ */
+function unrepresentableObject(value: object): string | null {
+  const tag = (value as Record<symbol, unknown>)[Symbol.toStringTag];
+  if (typeof tag === 'string') {
+    const known = UNREPRESENTABLE[tag];
+    if (known !== undefined) return known;
+    // Typed arrays are tagged with their own name and would serialize to `{"0":…,"1":…}`.
+    if (ArrayBuffer.isView(value)) return `a ${tag}`;
+  }
+
+  // RegExp and Error get their `Object.prototype.toString` tag from a spec special case
+  // rather than from `Symbol.toStringTag`, so neither is caught above.
+  if (value instanceof RegExp) return 'a RegExp';
+  if (value instanceof Error) return 'an Error, whose message and stack are not enumerable';
+
+  return null;
+}
+
+const BIGINT_REASON = 'a bigint, which JSON has no representation for';
+
+/** The same question for a value of any type. `serialize` inlines the primitive half. */
+function unrepresentable(value: unknown): string | null {
+  switch (typeof value) {
+    case 'bigint': return BIGINT_REASON;
+    case 'symbol': return 'a symbol';
+    case 'function': return 'a function';
+    case 'object': return value === null ? null : unrepresentableObject(value);
+    default: return null;
+  }
+}
+
+/**
+ * The trail of keys walked to reach a value: property names as strings, array positions as
+ * numbers. Numbers are kept unformatted so that walking an array costs no string building.
+ */
+type Path = (string | number)[];
+
+/** Renders a {@link Path} for error messages. */
+function describePath(path: readonly (string | number)[]): string {
+  if (path.length === 0) return 'the value passed in';
+  let out = '';
+  for (const segment of path) {
+    if (typeof segment === 'number') out += `[${segment}]`;
+    else out += out === '' ? segment : `.${segment}`;
+  }
+  return out;
+}
+
+function refuseUnrepresentable(why: string, path: readonly (string | number)[]): never {
+  throw new JsonMappingError(
+    `${describePath(path)} is ${why}, which cannot be serialized to JSON. ` +
+    'Give the property a @JsonSerialize() serializer that converts it, or drop it from the ' +
+    'output with @JsonIgnore().'
+  );
+}
+
+/**
+ * @param path The keys walked to reach `obj`, kept as a stack so that errors can name the
+ * offending property. Pushed and popped rather than concatenated, so the bookkeeping costs
+ * no string building on the way down.
+ */
+function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: number, deferred: Deferred, path: Path): any {
+  if (obj === null || obj === undefined) return obj;
+
+  // Primitives dominate the walk, so their check is inline: one `typeof` and, for the three
+  // types JSON cannot carry, a throw. Everything else defers to `unrepresentableObject`,
+  // which is only reached once per object and skipped entirely for arrays and dates.
+  const type = typeof obj;
+  if (type !== 'object') {
+    if (type === 'bigint') refuseUnrepresentable(BIGINT_REASON, path);
+    if (type === 'symbol') refuseUnrepresentable('a symbol', path);
+    if (type === 'function') refuseUnrepresentable('a function', path);
     return obj;
   }
 
   if (depth > ctx.maxDepth) {
     throw new JsonMappingError(
-      `Maximum nesting depth of ${ctx.maxDepth} exceeded while serializing. ` +
+      `Maximum nesting depth of ${ctx.maxDepth} exceeded while serializing at ${describePath(path)}. ` +
       `Raise it with the maxDepth option if this structure is legitimate.`
     );
   }
@@ -258,19 +357,28 @@ function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: 
     return obj.toISOString();
   }
 
+  const isArray = Array.isArray(obj);
+  if (!isArray) {
+    const why = unrepresentableObject(obj);
+    if (why !== null) refuseUnrepresentable(why, path);
+  }
+
   if (ancestors.has(obj)) {
     throw new JsonMappingError(
-      'Circular reference detected during serialization. Break the cycle with @JsonIgnore() ' +
-      'on the back-reference, or supply a @JsonSerialize() serializer for that property.'
+      `Circular reference detected during serialization at ${describePath(path)}. Break the cycle ` +
+      'with @JsonIgnore() on the back-reference, or supply a @JsonSerialize() serializer for ' +
+      'that property.'
     );
   }
 
   ancestors.add(obj);
   try {
-    if (Array.isArray(obj)) {
+    if (isArray) {
       const out: any[] = [];
-      for (const item of obj) {
-        out.push(serialize(item, ancestors, ctx, depth + 1, deferred));
+      for (let index = 0; index < obj.length; index++) {
+        path.push(index);
+        out.push(serialize(obj[index], ancestors, ctx, depth + 1, deferred, path));
+        path.pop();
       }
       return out;
     }
@@ -283,6 +391,7 @@ function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: 
       if (property.skip) continue;
 
       const value = obj[key];
+      path.push(key);
 
       // Custom serializers only see real values. Handing a serializer `undefined` for a
       // property that was simply never set turns an optional field into a crash.
@@ -292,14 +401,24 @@ function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: 
           const slot = property.name;
           // Claim the key now so the deferred write lands in declaration order rather than
           // being appended after every synchronous property.
+          const where = [...path];
           result[slot] = undefined;
-          deferred.push(produced.then((settled: any) => { result[slot] = settled; }));
+          deferred.push(produced.then((settled: any) => {
+            const bad = unrepresentable(settled);
+            if (bad !== null) refuseUnrepresentable(bad, where);
+            result[slot] = settled;
+          }));
         } else {
+          // A serializer that hands back a Map is the same silent `{}` by another route.
+          const bad = unrepresentable(produced);
+          if (bad !== null) refuseUnrepresentable(bad, path);
           result[property.name] = produced;
         }
       } else {
-        result[property.name] = serialize(value, ancestors, ctx, depth + 1, deferred);
+        result[property.name] = serialize(value, ancestors, ctx, depth + 1, deferred, path);
       }
+
+      path.pop();
     }
 
     return result;
@@ -795,7 +914,7 @@ export async function toPlain<T>(obj: T, options?: TransformOptions): Promise<an
   }
 
   const deferred: Deferred = [];
-  const plain = serialize(obj, new Set(), serializeContext(options), 0, deferred);
+  const plain = serialize(obj, new Set(), serializeContext(options), 0, deferred, []);
   await settle(deferred);
   return plain;
 }
@@ -816,7 +935,7 @@ export function toPlainSync<T>(obj: T, options?: TransformOptions): any {
   }
 
   const deferred: Deferred = [];
-  const plain = serialize(obj, new Set(), serializeContext(options), 0, deferred);
+  const plain = serialize(obj, new Set(), serializeContext(options), 0, deferred, []);
   refuseAsync(deferred, 'toPlainSync()', 'toPlain()');
   return plain;
 }
