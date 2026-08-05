@@ -1,7 +1,7 @@
 {
   "name": "cereale",
-  "version": "0.1.0",
-  "description": "Spring-like decorators for JSON mapping and validation in TypeScript",
+  "version": "2.0.0",
+  "description": "Strongly typed JSON mapping and validation for TypeScript classes \u2014 validated domain objects, not validated data",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -13,7 +13,10 @@
       "require": "./dist/cjs/index.js"
     }
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/esm/metadata.js",
+    "./dist/cjs/metadata.js"
+  ],
   "files": [
     "dist"
   ],
@@ -39,11 +42,13 @@
   },
   "keywords": [
     "json",
-    "mapping",
     "validation",
     "decorators",
-    "spring",
-    "typescript"
+    "typescript",
+    "zod-alternative",
+    "dto",
+    "serialization",
+    "class-validator"
   ],
   "author": "Avalon Vanguard",
   "license": "MIT",

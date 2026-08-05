@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
   IsString, IsInt, Min, IsIn, ValidateNested, JsonType, JsonSerialize, JsonDeserialize,
   JsonSerializer, JsonDeserializer, JsonMappingError,
-  registerDecorator, validate, toInstance, toPlain, configure, resetConfig,
+  defineRule, validate, toInstance, toPlain, configure, resetConfig,
 } from './index.js';
 
 afterEach(() => resetConfig());
@@ -20,11 +20,10 @@ describe('plan caching', () => {
     expect(await validate(before)).toEqual([]);
 
     // Register a rule after the plan has already been built and cached.
-    registerDecorator({
+    defineRule(Late, 'value', {
       name: 'isEven',
-      target: Late,
-      propertyName: 'value',
-      validator: (v: any) => typeof v === 'number' && v % 2 === 0,
+      validate: (v: any) => typeof v === 'number' && v % 2 === 0,
+      message: 'value must be even',
     });
 
     const after = new Late();
@@ -148,11 +147,11 @@ describe('each: true error reporting', () => {
   it('names the index of the element that failed', async () => {
     class Basket {
       @IsIn(['a', 'b'], { each: true })
-      tags: string[];
+      tags!: ('a' | 'b')[];
     }
 
     const basket = new Basket();
-    basket.tags = ['a', 'b', 'a', 'nope', 'b'];
+    basket.tags = ['a', 'b', 'a', 'nope' as 'a', 'b'];
 
     const errors = await validate(basket);
     expect(errors).toHaveLength(1);
@@ -162,10 +161,10 @@ describe('each: true error reporting', () => {
   it('leaves a caller-supplied message untouched', async () => {
     class Basket {
       @IsIn(['a'], { each: true, message: 'bad tag' })
-      tags: string[];
+      tags!: 'a'[];
     }
     const basket = new Basket();
-    basket.tags = ['a', 'zzz'];
+    basket.tags = ['a', 'zzz' as 'a'];
 
     const errors = await validate(basket);
     expect(errors[0]!.constraints['isIn']).toBe('bad tag');
@@ -174,10 +173,10 @@ describe('each: true error reporting', () => {
   it('gives the failing element to a message function, not the whole array', async () => {
     class Basket {
       @IsIn(['a'], { each: true, message: (args) => `rejected ${JSON.stringify(args.value)}` })
-      tags: string[];
+      tags!: 'a'[];
     }
     const basket = new Basket();
-    basket.tags = ['a', 'zzz'];
+    basket.tags = ['a', 'zzz' as 'a'];
 
     const errors = await validate(basket);
     expect(errors[0]!.constraints['isIn']).toBe('rejected "zzz"');
@@ -186,7 +185,7 @@ describe('each: true error reporting', () => {
   it('reports nothing when every element passes', async () => {
     class Basket {
       @IsIn(['a', 'b'], { each: true })
-      tags: string[];
+      tags!: ('a' | 'b')[];
     }
     const basket = new Basket();
     basket.tags = ['a', 'b'];

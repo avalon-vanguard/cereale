@@ -1,17 +1,58 @@
 # Cereale
 
-Cereale is a lightweight TypeScript library that provides Spring-like decorators for JSON mapping and validation. Built with ZERO external dependencies, it simplifies the process of converting between plain JSON and class instances with full validation support.
+**Validated domain objects, not validated data.**
+
+Cereale maps JSON onto your own classes and gives you back real instances — with your methods,
+your inheritance, your `instanceof` checks — and type-checks the validation rules against the
+fields they are attached to. Zero runtime dependencies.
+
+```typescript
+class User {
+  @JsonProperty('display_name')
+  @IsString() @MinLength(2)
+  displayName!: string;
+
+  @IsInt() @Min(0)
+  age!: number;
+
+  @IsString()
+  age2!: number;   // ← compile error: Type 'number' is not assignable to type 'string'
+
+  greet() { return `Hi ${this.displayName}`; }
+}
+
+const user = fromJsonSync(User, body);   // a real User
+user.greet();                            // your methods are still there
+```
+
+## Why not Zod?
+
+Zod is excellent, and if a plain validated object is what you want, use it. The difference is
+what you get back:
+
+| | Zod | Cereale |
+| --- | --- | --- |
+| Result of parsing | an anonymous object matching a schema | an instance of **your class** |
+| Methods, getters, inheritance | none — data only | preserved |
+| Where the type comes from | inferred from the schema | your class declaration |
+| Rules checked against the type | not applicable — schema *is* the type | **yes, at compile time** |
+| Bidirectional mapping (renaming both ways) | not the focus | first-class |
+
+Cereale does not infer your type from a schema, so you still write the field type and the rule.
+What it guarantees is that **the two cannot disagree** — `@IsInt() name!: string` does not
+compile. That is the guarantee class-validator has never offered.
+
+Reach for Cereale when your domain model is already a class — a NestJS provider, a TypeORM
+entity, anything with behaviour attached. Reach for Zod when you just want the data.
 
 ## Features
 
-- **Spring-like Decorators:** Familiar `@JsonProperty`, `@JsonSerialize`, `@JsonDeserialize`, `@JsonType`, and `@JsonPolymorphic`.
-- **Field-name Mapping:** Map `first_name` to `firstName` per property or with a naming strategy.
-- **Access Control:** Keep passwords out of responses and server-owned ids out of requests.
-- **Custom Serializers/Deserializers:** Easily handle complex types like Dates, BigInts, or custom objects.
-- **Polymorphism Support:** Native handling of polymorphic types via discriminators.
-- **Integrated Validation:** 50+ validation decorators, applied during mapping or on demand.
-- **Type Safety:** Fully written in TypeScript for excellent developer experience.
-- **Zero Dependencies:** Extremely lightweight and fast.
+- **Strongly typed decorators:** a rule that does not fit its field is a compile error.
+- **Real instances:** nested objects, polymorphic subtypes and arrays all come back as classes.
+- **Field-name mapping:** `@JsonProperty`, `@JsonAlias` and naming strategies, both directions.
+- **Access control:** keep passwords out of responses and server-owned ids out of requests.
+- **Sync and async:** every entry point has a synchronous twin.
+- **Zero dependencies**, ESM + CJS, Node 20+.
 
 ## Installation
 
@@ -19,108 +60,91 @@ Cereale is a lightweight TypeScript library that provides Spring-like decorators
 npm install cereale
 ```
 
-Enable `experimentalDecorators` in your `tsconfig.json`:
+Cereale v2 uses **TC39 standard decorators**, so no `experimentalDecorators` flag:
 
 ```json
 {
   "compilerOptions": {
-    "experimentalDecorators": true,
-    "target": "ES2022"
+    "target": "ES2022",
+    "lib": ["ESNext", "ESNext.Decorators"]
   }
 }
 ```
 
-Cereale stores its own metadata, so `reflect-metadata` is not required and
-`emitDecoratorMetadata` is not read. Requires Node 20 or later.
+Requires TypeScript 5.2+ and Node 20+. `reflect-metadata` is not needed and
+`emitDecoratorMetadata` is not read.
+
+> **Toolchain note.** Standard decorators are transformed by `tsc` and by esbuild (so Vite
+> works). They are **not** yet transformed by oxc; if your toolchain uses it, decorator syntax
+> will fail to parse. v1.x, which uses legacy decorators, remains available for those setups.
 
 ## Quick Start
 
-### 1. Define your Models
+### 1. Define your model
 
 ```typescript
 import {
-  IsString,
-  IsDate,
-  ValidateNested,
-  JsonSerialize,
-  JsonDeserialize,
-  JsonPolymorphic,
-  JsonSerializer,
-  JsonDeserializer
+  IsString, IsDate, IsInt, Min, ValidateNested, JsonType,
+  JsonProperty, JsonWriteOnly, JsonPolymorphic,
 } from 'cereale';
 
-// Custom Date Serializer
-class DateSerializer implements JsonSerializer<Date, string> {
-  serialize(value: Date): string {
-    return value.toISOString().split('T')[0]!;
-  }
-}
+class Address {
+  @IsString() street!: string;
+  @IsString() city!: string;
 
-class DateDeserializer implements JsonDeserializer<string, Date> {
-  deserialize(value: string): Date {
-    return new Date(value);
-  }
+  format() { return `${this.street}, ${this.city}`; }
 }
 
 abstract class Media {
-  @IsString()
-  abstract type: string;
-
-  @IsString()
-  title: string;
+  // Standard decorators cannot decorate an `abstract` member, so declare it concretely.
+  @IsString() type: string = '';
+  @IsString() title: string = '';
 }
 
 class Book extends Media {
-  type = 'book';
+  @IsString() override type = 'book';
+  @IsString() author!: string;
 
-  @IsString()
-  author: string;
-
-  @JsonSerialize(DateSerializer)
-  @JsonDeserialize(DateDeserializer)
+  @JsonProperty('published_at')
   @IsDate()
-  publishedAt: Date;
+  publishedAt!: Date;
 }
 
 class Library {
-  @IsString()
-  name: string;
+  @IsString() name!: string;
+
+  @ValidateNested() @JsonType(() => Address)
+  address!: Address;              // the class must match the field
 
   @ValidateNested({ each: true })
-  @JsonPolymorphic('type', [
-    { value: Book, name: 'book' }
-  ])
-  items: Media[];
+  @JsonPolymorphic<Media>('type', [{ value: Book, name: 'book' }])
+  items!: Media[];
 }
 ```
 
-Constraints accumulate down an inheritance chain: `Book` is checked against `Media`'s
-`@IsString() title` as well as its own rules.
+Constraints accumulate down an inheritance chain: `Book` is checked against `Media`'s rules as
+well as its own, and re-stating a rule on an override does not report it twice.
 
-### 2. Map JSON with Validation
+### 2. Map JSON, synchronously or not
 
 ```typescript
-import { fromJson, toJson, JsonValidationError, flattenErrors } from 'cereale';
+import { fromJsonSync, toJsonSync, JsonValidationError, flattenErrors } from 'cereale';
 
-async function main() {
-  const json = '{"name": "Central Library", "items": [{"type": "book", "title": "The Great Gatsby", "author": "F. Scott Fitzgerald", "publishedAt": "1925-04-10"}]}';
-
-  try {
-    // Deserialize JSON to Class Instance
-    const library = await fromJson(Library, json);
-    console.log(library.name);                     // "Central Library"
-    console.log(library.items[0] instanceof Book); // true
-
-    // Serialize Class Instance back to JSON
-    console.log(await toJson(library));
-  } catch (error) {
-    if (error instanceof JsonValidationError) {
-      console.error(flattenErrors(error.errors));
-      // { "items[0].title": ["title must be a string"] }
-    }
+try {
+  const library = fromJsonSync(Library, json);
+  library.address.format();                   // your method, on a real Address
+  library.items[0] instanceof Book;           // true
+  console.log(toJsonSync(library));
+} catch (error) {
+  if (error instanceof JsonValidationError) {
+    console.error(flattenErrors(error.errors));
+    // { "items[0].title": ["title must be a string"] }
   }
 }
 ```
+
+Every function has an async form too (`fromJson`, `toJson`, …) for when a serializer,
+deserializer or validator of yours returns a Promise.
 
 ### 3. Modern Web Frameworks (Request Integration)
 
@@ -400,6 +424,13 @@ If you validate at the edge and map internally afterwards, `{ validate: false }`
 dominant cost.
 
 ## Notes and Limitations
+
+- **Rules are checked, types are not inferred.** You write both the field type and the rule;
+  cereale guarantees they agree. If you want the type derived from a schema, that is Zod's
+  model, not this one.
+- **`abstract` fields cannot be decorated.** Standard decorators do not apply to abstract
+  members. Declare the field concretely in the base class instead.
+- **oxc does not transform standard decorators yet.** `tsc` and esbuild do.
 
 - **Circular references** are rejected during serialization with a `JsonMappingError`. Break
   the cycle with `@JsonIgnore()` on the back-reference.

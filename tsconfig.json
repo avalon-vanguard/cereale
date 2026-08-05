@@ -8,7 +8,7 @@
     // Environment Settings
     "module": "NodeNext",
     "target": "ES2025",
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "ESNext.Decorators"],
     "types": ["node"],
 
     // Other Outputs
@@ -33,7 +33,9 @@
     "isolatedModules": true,
     "skipLibCheck": true,
 
-    "experimentalDecorators": true
+    // NOTE: no `experimentalDecorators`. v2 uses TC39 standard decorators, which is what
+    // gives ClassFieldDecoratorContext<This, Value> and therefore compile-time checking of
+    // rules against field types. The two decorator systems cannot coexist in one program.
   },
   // NOTE: test files are deliberately included here so that `npm run type-check`
   // covers them. The two build configs exclude them (and the demo) from `dist`.

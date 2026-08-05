@@ -11,12 +11,29 @@ import {
   validate, toInstance,
 } from './index.js';
 
-/** Builds a one-property class, assigns `value`, and returns the constraint keys that failed. */
-async function check(decorate: (target: any, key: string) => void, value: any): Promise<string[]> {
+/**
+ * Applies a decorator to a synthetic one-field class and reports which rules failed.
+ *
+ * Standard decorators are invoked as `(undefined, context)` rather than against a prototype,
+ * so the context is built by hand here. Only `name` and `metadata` are read by the library;
+ * the rest satisfies the shape.
+ */
+async function check(decorator: any, value: any): Promise<string[]> {
+  const metadata = Object.create(null) as DecoratorMetadata;
+  decorator(undefined, {
+    kind: 'field',
+    name: 'val',
+    static: false,
+    private: false,
+    metadata,
+    access: { has: () => true, get: (o: any) => o.val, set: (o: any, v: any) => { o.val = v; } },
+    addInitializer: () => undefined,
+  });
+
   class Subject {
     val: any;
   }
-  decorate(Subject.prototype, 'val');
+  (Subject as any)[Symbol.metadata] = metadata;
 
   const subject = new Subject();
   subject.val = value;
@@ -232,9 +249,9 @@ describe('arrays', () => {
 describe('@ValidateIf', () => {
   class Payment {
     @IsIn(['card', 'invoice'])
-    method: string;
+    method!: 'card' | 'invoice';
 
-    @ValidateIf(o => o.method === 'card')
+    @ValidateIf<Payment>(o => o.method === 'card')
     @IsString()
     cardNumber?: string;
   }
