@@ -25,9 +25,10 @@ const user = fromJsonSync(User, body);   // a real User
 user.greet();                            // your methods are still there
 ```
 
-`docs/index.html` is a self-contained page with an interactive playground that runs this
-library in the browser. Build its assets with `npm run build:docs` and open the file — it
-loads nothing from the network.
+**[avalon-vanguard.github.io/cereale](https://avalon-vanguard.github.io/cereale/)** — an
+interactive playground that runs this library in your browser, the full decorator reference,
+and the toolchain matrix. The page is self-contained and loads nothing from the network; it is
+served from `docs/` on `main`, and `npm run build:docs` rebuilds its assets to open locally.
 
 ## Where it fits
 

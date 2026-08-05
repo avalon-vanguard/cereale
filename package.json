@@ -68,7 +68,7 @@
   "bugs": {
     "url": "https://github.com/avalon-vanguard/cereale/issues"
   },
-  "homepage": "https://github.com/avalon-vanguard/cereale#readme",
+  "homepage": "https://avalon-vanguard.github.io/cereale/",
   "devDependencies": {
     "@babel/standalone": "^8.0.4",
     "@eslint/js": "^10.0.1",

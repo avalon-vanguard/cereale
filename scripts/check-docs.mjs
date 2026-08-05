@@ -22,11 +22,22 @@ const failures = [];
 /** Subresource references — the things a browser fetches without being clicked. */
 const SUBRESOURCES = [
   [/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi, 'script src'],
-  [/<link\b[^>]*\bhref\s*=\s*["']([^"']+)["']/gi, 'link href'],
   [/<(?:img|iframe|video|audio|source|embed)\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi, 'media src'],
   [/@import\s+(?:url\()?["']([^"']+)["']/gi, 'css @import'],
   [/url\(\s*["']?(https?:\/\/[^)"']+)/gi, 'css url()'],
 ];
+
+/**
+ * `<link>` relations the browser actually fetches or connects to.
+ *
+ * Checked against `rel` rather than flagging every `<link href>`, because the metadata
+ * relations — `canonical` above all — are declarations about the document, not requests. A
+ * check that cannot tell the difference gets switched off the first time it is wrong.
+ */
+const FETCHING_REL = new Set([
+  'stylesheet', 'icon', 'shortcut icon', 'apple-touch-icon', 'apple-touch-icon-precomposed',
+  'manifest', 'preload', 'modulepreload', 'prefetch', 'prerender', 'preconnect', 'dns-prefetch',
+]);
 
 const isRemote = (url) => /^(?:https?:)?\/\//i.test(url);
 
@@ -38,6 +49,15 @@ for (const name of html) {
   for (const [pattern, kind] of SUBRESOURCES) {
     for (const match of source.matchAll(pattern)) {
       if (isRemote(match[1])) failures.push(`docs/${name}: remote ${kind} — ${match[1]}`);
+    }
+  }
+
+  for (const match of source.matchAll(/<link\b([^>]*)>/gi)) {
+    const attrs = match[1];
+    const rel = (/\brel\s*=\s*["']([^"']+)["']/i.exec(attrs)?.[1] ?? '').trim().toLowerCase();
+    const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(attrs)?.[1];
+    if (href && isRemote(href) && FETCHING_REL.has(rel)) {
+      failures.push(`docs/${name}: remote link rel="${rel}" — ${href}`);
     }
   }
   // A fetch to a CDN would not be caught by the markup scan.
