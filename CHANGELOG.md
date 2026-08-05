@@ -5,6 +5,186 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-05
+
+Every change here comes from the same question: where does cereale currently fail *quietly*?
+Three answers, each of which cost a real user nothing to hit and everything to diagnose.
+
+### Vite 8 and Vitest 4 silently drop decorators — `cereale/vite`
+
+Both transform TypeScript with oxc, which does not implement the standard decorator transform
+and does not say so. It leaves the syntax in the output, so:
+
+- `vitest` reports `0 test` next to a bare `SyntaxError`
+- `vite build` reports **success**, having emitted a bundle that throws the moment it is imported
+
+Cereale now ships the plugin that fixes it:
+
+```ts
+// vite.config.ts / vitest.config.ts
+import { standardDecorators } from 'cereale/vite';
+
+export default defineConfig({ plugins: [standardDecorators()] });
+```
+
+It transforms with esbuild, falling back to the TypeScript compiler; cereale depends on
+neither, and says which to install if somehow neither is present. Options: `include`,
+`target`, and `transformer` to pin one deliberately. The library's own test suite runs
+through it, so it is exercised by every test rather than by one test about itself.
+
+### Legacy decorators now say so
+
+With `experimentalDecorators: true` — still the default in most existing TypeScript projects,
+because class-validator required it — decorators are invoked as `(prototype, "name")` and
+cereale died with `TypeError: Cannot convert undefined or null to object`, which names neither
+the cause nor the fix. Every decorator now resolves its metadata through one checkpoint that
+raises an error naming the tsconfig setting instead. The same checkpoint rejects application
+to a method, getter or `accessor` field, all of which previously recorded metadata that
+nothing would ever read.
+
+### Values JSON cannot carry are refused, not emptied
+
+A populated `Map` serialized to `{}`. A `Set` serialized to `{}`. A `Uint8Array` to
+`{"0":1,"1":2}`. A `bigint` passed straight through, so the caller's own `JSON.stringify`
+threw somewhere unrelated. `RegExp`, `Error`, `Promise`, `WeakMap`, `DataView`, symbols and
+functions all had their own version of the same failure. All of them now raise a
+`JsonMappingError` that names the property path and the two ways out:
+
+```
+JsonMappingError: lines[1].tags[0] is a Set, which cannot be serialized to JSON.
+Give the property a @JsonSerialize() serializer that converts it, or drop it from the
+output with @JsonIgnore().
+```
+
+The check also covers what a `@JsonSerialize` serializer hands back, sync or async. This is
+**breaking** for anyone relying on the old behaviour, though "relying on" is a strong word for
+losing data without being told.
+
+Circular-reference and depth-limit errors now name the path too (`at child.parent`), which
+came free with the bookkeeping.
+
+### Fixed
+
+- `defineRule` on a subclass with no decorators of its own wrote the rule into its **base
+  class**, because the base's metadata object is inherited through the static prototype chain
+  and `??=` found it non-nullish. Every sibling subclass then inherited a rule meant for one
+  of them.
+- The plugin's TypeScript path emitted a `//# sourceMappingURL=` comment pointing at a file
+  nobody wrote, which Vite followed and failed to read on every transformed module.
+- `fromRequest` was declared as taking the global `Request`, so cereale's own published
+  `.d.ts` raised `Cannot find name 'Request'` in any project whose `lib` and `types` did not
+  happen to supply it — an error inside a dependency, in code the consumer may never call,
+  that they could not fix from the outside. It now takes a structural `JsonBody`
+  (`{ json(): Promise<any> }`), which a `Request` still satisfies. The library's own type
+  tests had been hiding this by enabling both `DOM` and `skipLibCheck`; `npm run check:types`
+  now compiles a consumer against `dist/` with neither.
+
+### The landing page
+
+`docs/index.html` was rebuilt. Its playground had been dead for some time and said nothing
+about it: the page loaded `@babel/standalone` from an **unpinned** CDN URL, which rolled over
+to Babel 8 and dropped the `proposal-class-properties` plugin the page asked for, so
+`Babel.transform` threw before it ever reached the decorators — and the decorator config it
+passed was `{ legacy: true }`, which 0.2.0 had already made wrong. The copy was still selling
+the 0.1.0 pitch ("Spring-like"), listed about half the decorators, and claimed "Zero overhead"
+against a README that publishes the real microsecond costs.
+
+The rebuild is one self-contained page: hand-written CSS, no Tailwind CDN, no CodeMirror, and
+a vendored compiler pinned by `package.json`. It loads **nothing** from the network, which
+`npm run check:docs` now enforces in CI. The playground runs the real bundled library across
+six examples; the reference lists all 68 decorators and the full API, counted from the bundle
+at runtime so it cannot drift.
+
+The hero's compiler error is not typed into the HTML — `scripts/build-docs.mjs` compiles the
+snippet with the real `tsc` and writes the verbatim diagnostic into `docs/diagnostics.js`,
+failing the build if a snippet the page calls a compile error ever compiles. Two more snippets
+that must compile guard against the harness passing vacuously.
+
+### Corrected
+
+The README's toolchain table said esbuild takes "the same settings via `tsconfigRaw`". It does
+not: esbuild lowers standard decorators only when its **own top-level `target`** is below
+`esnext`. A `target` inside `tsconfigRaw` sets the `useDefineForClassFields` default and
+nothing else, so following that advice leaves decorator syntax in the output — the same silent
+passthrough the section blames on oxc. Both the table and the landing page now say so, and
+`src/toolchain.test.ts` asserts both halves, so the trap is documented by a test rather than by
+a sentence.
+
+Also corrected in the same pass: the toolchain table is described as executed by a test, but
+the oxc row — the only ✗ — cannot be, because oxc ships inside a native binary with no
+standalone transform API. The claim now covers the three rows it actually covers.
+
+### A rename now actually takes effect
+
+**Breaking.** The docs said that once a property carries `@JsonProperty`, its original name
+"is no longer accepted on input". It stopped being *mapped*, but it was not refused: unlike
+`@JsonReadOnly`, whose JSON name goes into the blocked set, a renamed property's old key fell
+through to the unknown-key policy, and the default `allow` copied it onto the instance
+untouched. The value landed on a declared property having skipped everything declared for it —
+no `@JsonType` conversion, so `@ValidateNested` then inspected a plain object with no model and
+reported nothing. A payload aimed at the previous version of a class was accepted in part, in
+silence.
+
+Names that no longer reach their property are now refused. That covers three routes to the
+same hole:
+
+- the property key of a field renamed with `@JsonProperty`
+- the raw key of a field a naming strategy renders differently (`firstName` under `snake_case`)
+- the property key of a field that is both renamed and `@JsonReadOnly`, which was still
+  settable under its own key
+
+Refused, not silently swallowed. A stale name is a mismatch with whatever produced the payload
+rather than a deliberate refusal like `@JsonReadOnly`, so `unknownKeys: 'error'` still reports
+it — and now says which property it was reaching for and what that property is called now:
+
+```
+JsonMappingError: "ref" is not a JSON name for Order: property "ref" is mapped to
+"order_ref". Send that name, or add @JsonAlias("ref") to keep accepting this one.
+```
+
+`@JsonAlias` remains the way to keep an old name working, and a key that some *other* property
+legitimately answers to is still mapped to that property.
+
+Two reference entries on the landing page were also imprecise: `@IsNotEmpty()` and `@IsEmpty()`
+read as complements but are not (`[]` and `{}` pass both), and `unknownKeys` is
+deserialization-only.
+
+### Positioning
+
+`zod-alternative` is out of the keywords, and the README leads with the comparison that
+actually applies: cereale replaces **class-validator + class-transformer**. It does not infer
+types from schemas, and framing it against Zod invited exactly the objection that it is
+missing `z.infer` — which is a different design, not a gap.
+
+The README's toolchain support table (`tsc`, esbuild, swc ✅, oxc ❌) is now
+[executed by a test](src/toolchain.test.ts): each row compiles a decorated class with that
+tool and asserts the metadata arrived, so the table cannot quietly go stale.
+
+### Performance
+
+Serialization is a few percent slower for the representability check. Primitives are handled
+inline, and arrays and dates skip it, so it costs one `Symbol.toStringTag` read per object.
+Validation is unchanged.
+
+### Packaging
+
+`files` was `["dist"]`, but `dist` carries 256 KB of `.js.map` and `.d.ts.map` files whose
+`sources` point at `../../src/*.ts` — which was not published. Every shipped sourcemap
+resolved to nothing: 44% of the tarball, dead. The source is only 116 KB and its comments are
+the most detailed explanation of why the engine does what it does, so it is now published
+(tests and the demo excluded) and the maps resolve. Stepping into cereale in a debugger, and
+"go to definition" from a decorator, both land in the real TypeScript.
+
+`CHANGELOG.md` ships too. The `repository`, `homepage` and `bugs` URLs said `Avalon-Vanguard`
+and only worked through GitHub's redirect; they now use the org's actual lowercase name.
+`publishConfig.access` is set explicitly so a future move to a scoped name cannot quietly
+attempt a private publish.
+
+A `Publish to npm` workflow is in place but deliberately manual — pushing a tag does not
+publish. It checks that the tag exists and points at the commit being published, refuses a
+version already on the registry, runs the full `verify` gate, prints the file list, and
+defaults to a dry run. Publishing needs an `NPM_TOKEN` secret and someone choosing to run it.
+
 ## [0.2.0] - 2026-08-04
 
 > The project stays on 0.x while nothing has been published: under semver that signals the

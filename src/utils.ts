@@ -50,6 +50,18 @@ const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
  */
 export const REDACTED = '[redacted]';
 
+/**
+ * Anything that can hand back a parsed JSON body — a `Request`, a `Response`, or a test double.
+ *
+ * Declared structurally rather than as the global `Request`, which does not exist unless the
+ * consumer's `lib` includes DOM or their `types` includes node. Naming the global here put a
+ * `Cannot find name 'Request'` error inside cereale's own published `.d.ts`, in a project that
+ * may not call `fromRequest` at all and cannot fix it from the outside.
+ */
+export interface JsonBody {
+  json(): Promise<any>;
+}
+
 // --- Internal Engine ---
 
 interface SerializeContext {
@@ -134,11 +146,23 @@ interface InboundNames {
   props: Map<string, InboundProperty>;
   /**
    * JSON names that belong to a declared property the payload may NOT set
-   * (`@JsonIgnore` / `@JsonReadOnly`). They are dropped rather than treated as unknown
-   * keys — otherwise the default `unknownKeys: 'allow'` policy would copy them straight
-   * back onto the instance and undo the protection.
+   * (`@JsonIgnore` / `@JsonReadOnly`), plus those properties' own keys. They are dropped
+   * rather than treated as unknown keys — otherwise the default `unknownKeys: 'allow'` policy
+   * would copy them straight back onto the instance and undo the protection.
    */
   blocked: Set<string>;
+  /**
+   * Names that used to reach a declared property but no longer do: the property key of a
+   * field renamed by `@JsonProperty`, or its raw key under a naming strategy that renders it
+   * differently.
+   *
+   * These are kept apart from `blocked` because they mean something different. A blocked name
+   * is a deliberate refusal, so it is dropped in silence. A stale name is a mismatch between
+   * this class and whatever produced the payload, which a caller who asked for
+   * `unknownKeys: 'error'` wants to hear about — and can be told precisely, since we know
+   * which property it was reaching for and what that property is called now.
+   */
+  stale: Map<string, { property: string; accepted: string }>;
 }
 
 // Name maps are derived purely from decorator metadata, which is fixed once a class is
@@ -148,10 +172,16 @@ const inboundCache = new WeakMap<ClassModel, { version: number; byStrategy: Map<
 /**
  * Builds the JSON-name -> property-key lookup used when reading a payload.
  *
- * Only names the class actually declares are accepted: the `@JsonProperty` name (or the
- * naming strategy's rendering of the property name) plus any `@JsonAlias`. Renaming a
- * property therefore stops the old name from being silently accepted — add `@JsonAlias` to
- * keep it working for older clients.
+ * Only names the class actually declares are mapped: the `@JsonProperty` name (or the naming
+ * strategy's rendering of the property name) plus any `@JsonAlias`.
+ *
+ * A name that no longer reaches its property must not fall through to the unknown-key policy,
+ * because `allow` would then copy it onto the instance raw — landing a value on a declared
+ * property having skipped the `@JsonType` or `@JsonDeserialize` declared for it, so that
+ * `@ValidateNested` finds a plain object with no model and reports nothing. Renaming a
+ * property has to actually take effect. Those names go into `stale` (reported under `error`,
+ * dropped otherwise), and the keys of properties the payload may not set at all go into
+ * `blocked` (always dropped in silence).
  */
 function inboundNameMap(model: ClassModel, ctx: DeserializeContext): InboundNames {
   let entry = inboundCache.get(model);
@@ -164,7 +194,13 @@ function inboundNameMap(model: ClassModel, ctx: DeserializeContext): InboundName
 
   const accept = new Map<string, string>();
   const blocked = new Set<string>();
+  const stale = new Map<string, { property: string; accepted: string }>();
   const props = new Map<string, InboundProperty>();
+
+  // Whether a property key is also some property's accepted JSON name is only known once
+  // every property has been walked, so these are resolved after the loop.
+  const shadowed: string[] = [];
+  const staleCandidates: { property: string; accepted: string }[] = [];
 
   const claim = (external: string, key: string) => {
     const owner = accept.get(external);
@@ -183,10 +219,14 @@ function inboundNameMap(model: ClassModel, ctx: DeserializeContext): InboundName
     const access = accessOf(model, key);
     if (access === 'none' || access === 'readonly') {
       for (const name of names) blocked.add(name);
+      // A renamed read-only property would otherwise still be settable under its own key,
+      // which is the protection undone by a different route.
+      shadowed.push(key);
       continue;
     }
 
     for (const name of names) claim(name, key);
+    if (!names.includes(key)) staleCandidates.push({ property: key, accepted: names[0]! });
 
     if (property.deserializer || property.polymorphic || property.type) {
       props.set(key, {
@@ -197,7 +237,18 @@ function inboundNameMap(model: ClassModel, ctx: DeserializeContext): InboundName
     }
   }
 
-  const result = { accept, blocked, props };
+  // A property key that another property legitimately answers to stays mapped; only keys that
+  // nothing accepts are refused.
+  for (const key of shadowed) {
+    if (!accept.has(key)) blocked.add(key);
+  }
+  for (const candidate of staleCandidates) {
+    if (!accept.has(candidate.property) && !blocked.has(candidate.property)) {
+      stale.set(candidate.property, candidate);
+    }
+  }
+
+  const result = { accept, blocked, stale, props };
   entry.byStrategy.set(ctx.namingKey, result);
   return result;
 }
@@ -242,14 +293,113 @@ function refuseAsync(deferred: Deferred, operation: string, asyncName: string): 
   );
 }
 
-function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: number, deferred: Deferred): any {
-  if (obj === null || obj === undefined || typeof obj !== 'object') {
+/**
+ * Values that carry their data in internal slots rather than in own enumerable properties.
+ *
+ * Walking one of these with `Object.keys` yields `{}` — a populated `Map` becomes an empty
+ * object and nothing anywhere says so. Keyed by `Symbol.toStringTag`, which every one of them
+ * defines on its prototype, so the lookup costs a single property read and still recognises
+ * instances that came from another realm.
+ */
+const UNREPRESENTABLE: Record<string, string> = {
+  Map: 'a Map',
+  Set: 'a Set',
+  WeakMap: 'a WeakMap',
+  WeakSet: 'a WeakSet',
+  WeakRef: 'a WeakRef',
+  Promise: 'a Promise',
+  ArrayBuffer: 'an ArrayBuffer',
+  SharedArrayBuffer: 'a SharedArrayBuffer',
+  DataView: 'a DataView',
+  Generator: 'a generator',
+  AsyncGenerator: 'an async generator',
+};
+
+/**
+ * Describes why a value cannot be represented in JSON, or returns null if it can.
+ *
+ * The alternative to raising this is what the engine used to do: emit `{}` for a `Map`,
+ * index-keyed noise for a `Uint8Array`, and a bigint that makes the caller's own
+ * `JSON.stringify` throw somewhere else entirely. This library's position is that silent
+ * success is the worst failure mode a mapping layer can have, and that has to include its own.
+ */
+function unrepresentableObject(value: object): string | null {
+  const tag = (value as Record<symbol, unknown>)[Symbol.toStringTag];
+  if (typeof tag === 'string') {
+    const known = UNREPRESENTABLE[tag];
+    if (known !== undefined) return known;
+    // Typed arrays are tagged with their own name and would serialize to `{"0":…,"1":…}`.
+    if (ArrayBuffer.isView(value)) return `a ${tag}`;
+  }
+
+  // RegExp and Error get their `Object.prototype.toString` tag from a spec special case
+  // rather than from `Symbol.toStringTag`, so neither is caught above.
+  if (value instanceof RegExp) return 'a RegExp';
+  if (value instanceof Error) return 'an Error, whose message and stack are not enumerable';
+
+  return null;
+}
+
+const BIGINT_REASON = 'a bigint, which JSON has no representation for';
+
+/** The same question for a value of any type. `serialize` inlines the primitive half. */
+function unrepresentable(value: unknown): string | null {
+  switch (typeof value) {
+    case 'bigint': return BIGINT_REASON;
+    case 'symbol': return 'a symbol';
+    case 'function': return 'a function';
+    case 'object': return value === null ? null : unrepresentableObject(value);
+    default: return null;
+  }
+}
+
+/**
+ * The trail of keys walked to reach a value: property names as strings, array positions as
+ * numbers. Numbers are kept unformatted so that walking an array costs no string building.
+ */
+type Path = (string | number)[];
+
+/** Renders a {@link Path} for error messages. */
+function describePath(path: readonly (string | number)[]): string {
+  if (path.length === 0) return 'the value passed in';
+  let out = '';
+  for (const segment of path) {
+    if (typeof segment === 'number') out += `[${segment}]`;
+    else out += out === '' ? segment : `.${segment}`;
+  }
+  return out;
+}
+
+function refuseUnrepresentable(why: string, path: readonly (string | number)[]): never {
+  throw new JsonMappingError(
+    `${describePath(path)} is ${why}, which cannot be serialized to JSON. ` +
+    'Give the property a @JsonSerialize() serializer that converts it, or drop it from the ' +
+    'output with @JsonIgnore().'
+  );
+}
+
+/**
+ * @param path The keys walked to reach `obj`, kept as a stack so that errors can name the
+ * offending property. Pushed and popped rather than concatenated, so the bookkeeping costs
+ * no string building on the way down.
+ */
+function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: number, deferred: Deferred, path: Path): any {
+  if (obj === null || obj === undefined) return obj;
+
+  // Primitives dominate the walk, so their check is inline: one `typeof` and, for the three
+  // types JSON cannot carry, a throw. Everything else defers to `unrepresentableObject`,
+  // which is only reached once per object and skipped entirely for arrays and dates.
+  const type = typeof obj;
+  if (type !== 'object') {
+    if (type === 'bigint') refuseUnrepresentable(BIGINT_REASON, path);
+    if (type === 'symbol') refuseUnrepresentable('a symbol', path);
+    if (type === 'function') refuseUnrepresentable('a function', path);
     return obj;
   }
 
   if (depth > ctx.maxDepth) {
     throw new JsonMappingError(
-      `Maximum nesting depth of ${ctx.maxDepth} exceeded while serializing. ` +
+      `Maximum nesting depth of ${ctx.maxDepth} exceeded while serializing at ${describePath(path)}. ` +
       `Raise it with the maxDepth option if this structure is legitimate.`
     );
   }
@@ -258,19 +408,28 @@ function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: 
     return obj.toISOString();
   }
 
+  const isArray = Array.isArray(obj);
+  if (!isArray) {
+    const why = unrepresentableObject(obj);
+    if (why !== null) refuseUnrepresentable(why, path);
+  }
+
   if (ancestors.has(obj)) {
     throw new JsonMappingError(
-      'Circular reference detected during serialization. Break the cycle with @JsonIgnore() ' +
-      'on the back-reference, or supply a @JsonSerialize() serializer for that property.'
+      `Circular reference detected during serialization at ${describePath(path)}. Break the cycle ` +
+      'with @JsonIgnore() on the back-reference, or supply a @JsonSerialize() serializer for ' +
+      'that property.'
     );
   }
 
   ancestors.add(obj);
   try {
-    if (Array.isArray(obj)) {
+    if (isArray) {
       const out: any[] = [];
-      for (const item of obj) {
-        out.push(serialize(item, ancestors, ctx, depth + 1, deferred));
+      for (let index = 0; index < obj.length; index++) {
+        path.push(index);
+        out.push(serialize(obj[index], ancestors, ctx, depth + 1, deferred, path));
+        path.pop();
       }
       return out;
     }
@@ -283,6 +442,7 @@ function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: 
       if (property.skip) continue;
 
       const value = obj[key];
+      path.push(key);
 
       // Custom serializers only see real values. Handing a serializer `undefined` for a
       // property that was simply never set turns an optional field into a crash.
@@ -292,14 +452,24 @@ function serialize(obj: any, ancestors: Set<any>, ctx: SerializeContext, depth: 
           const slot = property.name;
           // Claim the key now so the deferred write lands in declaration order rather than
           // being appended after every synchronous property.
+          const where = [...path];
           result[slot] = undefined;
-          deferred.push(produced.then((settled: any) => { result[slot] = settled; }));
+          deferred.push(produced.then((settled: any) => {
+            const bad = unrepresentable(settled);
+            if (bad !== null) refuseUnrepresentable(bad, where);
+            result[slot] = settled;
+          }));
         } else {
+          // A serializer that hands back a Map is the same silent `{}` by another route.
+          const bad = unrepresentable(produced);
+          if (bad !== null) refuseUnrepresentable(bad, path);
           result[property.name] = produced;
         }
       } else {
-        result[property.name] = serialize(value, ancestors, ctx, depth + 1, deferred);
+        result[property.name] = serialize(value, ancestors, ctx, depth + 1, deferred, path);
       }
+
+      path.pop();
     }
 
     return result;
@@ -336,6 +506,22 @@ function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deserialize
     // rejecting the whole request because a client echoed back a server-owned id is worse
     // than quietly refusing to honour it.
     if (inbound.blocked.has(incoming)) continue;
+
+    // A name that used to reach a declared property. Never assigned — doing so would land the
+    // value on that property having skipped every conversion declared for it — but a caller
+    // who asked to hear about unrecognised keys hears about this one by name, because it is a
+    // mismatch with whatever produced the payload rather than a deliberate refusal.
+    const outdated = inbound.stale.get(incoming);
+    if (outdated !== undefined) {
+      if (ctx.unknownKeys === 'error') {
+        throw new JsonMappingError(
+          `${JSON.stringify(incoming)} is not a JSON name for ${clazz.name}: property ` +
+          `"${outdated.property}" is mapped to ${JSON.stringify(outdated.accepted)}. ` +
+          `Send that name, or add @JsonAlias(${JSON.stringify(incoming)}) to keep accepting this one.`
+        );
+      }
+      continue;
+    }
 
     const key = inbound.accept.get(incoming);
     if (key === undefined) {
@@ -795,7 +981,7 @@ export async function toPlain<T>(obj: T, options?: TransformOptions): Promise<an
   }
 
   const deferred: Deferred = [];
-  const plain = serialize(obj, new Set(), serializeContext(options), 0, deferred);
+  const plain = serialize(obj, new Set(), serializeContext(options), 0, deferred, []);
   await settle(deferred);
   return plain;
 }
@@ -816,7 +1002,7 @@ export function toPlainSync<T>(obj: T, options?: TransformOptions): any {
   }
 
   const deferred: Deferred = [];
-  const plain = serialize(obj, new Set(), serializeContext(options), 0, deferred);
+  const plain = serialize(obj, new Set(), serializeContext(options), 0, deferred, []);
   refuseAsync(deferred, 'toPlainSync()', 'toPlain()');
   return plain;
 }
@@ -981,7 +1167,7 @@ function parseJson(json: string): any {
  */
 export async function fromRequest<T>(
   clazz: ClassConstructor<T>,
-  request: Request,
+  request: JsonBody,
   options?: TransformOptions
 ): Promise<T> {
   let plain: any;
