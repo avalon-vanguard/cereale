@@ -114,24 +114,40 @@ Also corrected in the same pass: the toolchain table is described as executed by
 the oxc row — the only ✗ — cannot be, because oxc ships inside a native binary with no
 standalone transform API. The claim now covers the three rows it actually covers.
 
-### A sharp edge, now documented and pinned
+### A rename now actually takes effect
 
-The README, the landing page and two doc comments all said that once a property carries
-`@JsonProperty`, its original name "is no longer accepted on input". It is no longer
-*mapped* — but it is not rejected either. Unlike `@JsonReadOnly`, whose JSON name goes into
-the blocked set, a renamed property's old key falls through to the unknown-key policy, and
-the default `allow` copies it onto the instance untouched. The value lands on a declared
-property having skipped everything declared for it: no `@JsonType` conversion, so
-`@ValidateNested` then inspects a plain object with no model and reports nothing.
+**Breaking.** The docs said that once a property carries `@JsonProperty`, its original name
+"is no longer accepted on input". It stopped being *mapped*, but it was not refused: unlike
+`@JsonReadOnly`, whose JSON name goes into the blocked set, a renamed property's old key fell
+through to the unknown-key policy, and the default `allow` copied it onto the instance
+untouched. The value landed on a declared property having skipped everything declared for it —
+no `@JsonType` conversion, so `@ValidateNested` then inspected a plain object with no model and
+reported nothing. A payload aimed at the previous version of a class was accepted in part, in
+silence.
 
-Blocking the old key would fix that, but it would also swallow the `unknownKeys: 'error'`
-report a strict caller gets today, which is arguably the more useful signal. That decision
-has not been made, so the behaviour is stated accurately everywhere it was previously stated
-wrongly, and five tests in `mapping.test.ts` pin it — including the `strip` and `error`
-policies and the `@JsonAlias` fix — so it cannot change by accident either way.
+Names that no longer reach their property are now refused. That covers three routes to the
+same hole:
 
-Two reference entries were also imprecise: `@IsNotEmpty()` and `@IsEmpty()` read as
-complements but are not (`[]` and `{}` pass both), and `unknownKeys` is deserialization-only.
+- the property key of a field renamed with `@JsonProperty`
+- the raw key of a field a naming strategy renders differently (`firstName` under `snake_case`)
+- the property key of a field that is both renamed and `@JsonReadOnly`, which was still
+  settable under its own key
+
+Refused, not silently swallowed. A stale name is a mismatch with whatever produced the payload
+rather than a deliberate refusal like `@JsonReadOnly`, so `unknownKeys: 'error'` still reports
+it — and now says which property it was reaching for and what that property is called now:
+
+```
+JsonMappingError: "ref" is not a JSON name for Order: property "ref" is mapped to
+"order_ref". Send that name, or add @JsonAlias("ref") to keep accepting this one.
+```
+
+`@JsonAlias` remains the way to keep an old name working, and a key that some *other* property
+legitimately answers to is still mapped to that property.
+
+Two reference entries on the landing page were also imprecise: `@IsNotEmpty()` and `@IsEmpty()`
+read as complements but are not (`[]` and `{}` pass both), and `unknownKeys` is
+deserialization-only.
 
 ### Positioning
 

@@ -507,12 +507,15 @@ it is one `Symbol.toStringTag` read per object.
 - **`validate()` on a plain object** returns no errors: rules live on the class, so validate
   the instance you get back from `toInstance`, not the raw payload.
 - **Renaming is not backwards-compatible by itself.** Once a property carries
-  `@JsonProperty`, its original name no longer *maps* to it. Under the default
-  `unknownKeys: 'allow'` it is not rejected either: it is copied onto the instance raw,
-  skipping any `@JsonType` or `@JsonDeserialize` conversion declared for that field, so the
-  property ends up holding a plain object that `@ValidateNested` then finds nothing wrong
-  with. Add `@JsonAlias` to keep older clients working, or set `unknownKeys` to `strip` or
-  `error`.
+  `@JsonProperty`, its original name no longer reaches it — and is refused rather than copied
+  onto the instance behind the rename's back. Add `@JsonAlias` to keep older clients working.
+  Under `unknownKeys: 'error'` the stale name is reported along with what the property is
+  called now:
+
+  ```
+  JsonMappingError: "ref" is not a JSON name for Order: property "ref" is mapped to
+  "order_ref". Send that name, or add @JsonAlias("ref") to keep accepting this one.
+  ```
 
 ## Contributing
 

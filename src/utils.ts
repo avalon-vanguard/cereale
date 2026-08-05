@@ -146,11 +146,23 @@ interface InboundNames {
   props: Map<string, InboundProperty>;
   /**
    * JSON names that belong to a declared property the payload may NOT set
-   * (`@JsonIgnore` / `@JsonReadOnly`). They are dropped rather than treated as unknown
-   * keys — otherwise the default `unknownKeys: 'allow'` policy would copy them straight
-   * back onto the instance and undo the protection.
+   * (`@JsonIgnore` / `@JsonReadOnly`), plus those properties' own keys. They are dropped
+   * rather than treated as unknown keys — otherwise the default `unknownKeys: 'allow'` policy
+   * would copy them straight back onto the instance and undo the protection.
    */
   blocked: Set<string>;
+  /**
+   * Names that used to reach a declared property but no longer do: the property key of a
+   * field renamed by `@JsonProperty`, or its raw key under a naming strategy that renders it
+   * differently.
+   *
+   * These are kept apart from `blocked` because they mean something different. A blocked name
+   * is a deliberate refusal, so it is dropped in silence. A stale name is a mismatch between
+   * this class and whatever produced the payload, which a caller who asked for
+   * `unknownKeys: 'error'` wants to hear about — and can be told precisely, since we know
+   * which property it was reaching for and what that property is called now.
+   */
+  stale: Map<string, { property: string; accepted: string }>;
 }
 
 // Name maps are derived purely from decorator metadata, which is fixed once a class is
@@ -163,12 +175,13 @@ const inboundCache = new WeakMap<ClassModel, { version: number; byStrategy: Map<
  * Only names the class actually declares are mapped: the `@JsonProperty` name (or the naming
  * strategy's rendering of the property name) plus any `@JsonAlias`.
  *
- * Note what this does *not* do. A renamed property's old name stops mapping to it, but it is
- * not blocked — unlike `@JsonReadOnly`, which is. It falls through to the unknown-key policy,
- * and the default `allow` copies it onto the instance raw, bypassing the `@JsonType` or
- * `@JsonDeserialize` declared for that field. `renames leave the old key writable` in
- * mapping.test.ts pins that behaviour; see the note there for why it has not simply been
- * changed.
+ * A name that no longer reaches its property must not fall through to the unknown-key policy,
+ * because `allow` would then copy it onto the instance raw — landing a value on a declared
+ * property having skipped the `@JsonType` or `@JsonDeserialize` declared for it, so that
+ * `@ValidateNested` finds a plain object with no model and reports nothing. Renaming a
+ * property has to actually take effect. Those names go into `stale` (reported under `error`,
+ * dropped otherwise), and the keys of properties the payload may not set at all go into
+ * `blocked` (always dropped in silence).
  */
 function inboundNameMap(model: ClassModel, ctx: DeserializeContext): InboundNames {
   let entry = inboundCache.get(model);
@@ -181,7 +194,13 @@ function inboundNameMap(model: ClassModel, ctx: DeserializeContext): InboundName
 
   const accept = new Map<string, string>();
   const blocked = new Set<string>();
+  const stale = new Map<string, { property: string; accepted: string }>();
   const props = new Map<string, InboundProperty>();
+
+  // Whether a property key is also some property's accepted JSON name is only known once
+  // every property has been walked, so these are resolved after the loop.
+  const shadowed: string[] = [];
+  const staleCandidates: { property: string; accepted: string }[] = [];
 
   const claim = (external: string, key: string) => {
     const owner = accept.get(external);
@@ -200,10 +219,14 @@ function inboundNameMap(model: ClassModel, ctx: DeserializeContext): InboundName
     const access = accessOf(model, key);
     if (access === 'none' || access === 'readonly') {
       for (const name of names) blocked.add(name);
+      // A renamed read-only property would otherwise still be settable under its own key,
+      // which is the protection undone by a different route.
+      shadowed.push(key);
       continue;
     }
 
     for (const name of names) claim(name, key);
+    if (!names.includes(key)) staleCandidates.push({ property: key, accepted: names[0]! });
 
     if (property.deserializer || property.polymorphic || property.type) {
       props.set(key, {
@@ -214,7 +237,18 @@ function inboundNameMap(model: ClassModel, ctx: DeserializeContext): InboundName
     }
   }
 
-  const result = { accept, blocked, props };
+  // A property key that another property legitimately answers to stays mapped; only keys that
+  // nothing accepts are refused.
+  for (const key of shadowed) {
+    if (!accept.has(key)) blocked.add(key);
+  }
+  for (const candidate of staleCandidates) {
+    if (!accept.has(candidate.property) && !blocked.has(candidate.property)) {
+      stale.set(candidate.property, candidate);
+    }
+  }
+
+  const result = { accept, blocked, stale, props };
   entry.byStrategy.set(ctx.namingKey, result);
   return result;
 }
@@ -472,6 +506,22 @@ function deserialize<T>(clazz: ClassConstructor<T>, plain: any, ctx: Deserialize
     // rejecting the whole request because a client echoed back a server-owned id is worse
     // than quietly refusing to honour it.
     if (inbound.blocked.has(incoming)) continue;
+
+    // A name that used to reach a declared property. Never assigned — doing so would land the
+    // value on that property having skipped every conversion declared for it — but a caller
+    // who asked to hear about unrecognised keys hears about this one by name, because it is a
+    // mismatch with whatever produced the payload rather than a deliberate refusal.
+    const outdated = inbound.stale.get(incoming);
+    if (outdated !== undefined) {
+      if (ctx.unknownKeys === 'error') {
+        throw new JsonMappingError(
+          `${JSON.stringify(incoming)} is not a JSON name for ${clazz.name}: property ` +
+          `"${outdated.property}" is mapped to ${JSON.stringify(outdated.accepted)}. ` +
+          `Send that name, or add @JsonAlias(${JSON.stringify(incoming)}) to keep accepting this one.`
+        );
+      }
+      continue;
+    }
 
     const key = inbound.accept.get(incoming);
     if (key === undefined) {

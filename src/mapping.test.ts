@@ -465,34 +465,30 @@ describe('renaming and the unknown-key policy', () => {
   }
 
   /**
-   * A sharp edge, pinned here rather than fixed, because the fix is a judgement call the
-   * library has not made yet.
+   * A rename has to actually take effect.
    *
-   * `@JsonReadOnly` puts its JSON name in the blocked set, so a client cannot set it.
-   * `@JsonProperty` does not do the same for the property's *old* name: that name simply
-   * stops mapping, falls through to the unknown-key policy, and the default `allow` copies
-   * it onto the instance untouched. The value therefore lands on a declared property having
-   * skipped everything declared for it — no `@JsonType` conversion, and `@ValidateNested`
-   * then finds a plain object with no model and reports nothing.
-   *
-   * Blocking the old key would fix that, but it would also swallow the `unknownKeys: 'error'`
-   * report that a strict caller gets today, which is arguably the more useful signal. Until
-   * that is decided, the behaviour is documented in the README and on the landing page, and
-   * asserted here so it cannot change by accident.
+   * The old key used to fall through to the unknown-key policy, and the default `allow`
+   * copied it onto the instance untouched — landing a value on a declared property having
+   * skipped the `@JsonType` declared for it, so `@ValidateNested` then inspected a plain
+   * object with no model and reported nothing. A payload aimed at the previous version of
+   * this class was accepted in part, in silence.
    */
-  it('leaves the old key writable after a rename, under the default policy', async () => {
+  it('does not write the old key after a rename', async () => {
     const order = await toInstance(
       Order,
       { ref: 'A-1', address: { city: 'Paris' } },
       { validate: false }
     );
 
-    expect(order.ref).toBe('A-1');
-    // The conversion declared for the field did not run.
-    expect(order.address).toEqual({ city: 'Paris' });
-    expect(order.address instanceof Address).toBe(false);
-    // And nothing complains about it.
-    expect(await validate(order)).toEqual([]);
+    expect(order.ref).toBeUndefined();
+    expect(order.address).toBeUndefined();
+  });
+
+  it('lets validation report the fields the stale payload failed to fill', async () => {
+    const order = await toInstance(Order, { ref: 'A-1' }, { validate: false });
+    const errors = flattenErrors(await validate(order));
+
+    expect(Object.keys(errors)).toContain('ref');
   });
 
   it('maps the declared names properly, producing real instances', async () => {
@@ -506,24 +502,23 @@ describe('renaming and the unknown-key policy', () => {
     expect(order.address instanceof Address).toBe(true);
   });
 
-  it('drops the old key under unknownKeys: strip', async () => {
-    const order = await toInstance(
-      Order,
-      { ref: 'A-1', address: { city: 'Paris' } },
-      { validate: false, unknownKeys: 'strip' }
-    );
-
-    expect(order.ref).toBeUndefined();
-    expect(order.address).toBeUndefined();
-  });
-
-  it('reports the old key under unknownKeys: error', async () => {
+  // A stale name is a mismatch with whatever produced the payload, not a deliberate refusal
+  // like @JsonReadOnly, so a caller who asked to hear about unrecognised keys hears about it —
+  // and is told which property it was reaching for and what that property is called now.
+  it('names the property and its current JSON name under unknownKeys: error', async () => {
     await expect(
       toInstance(Order, { ref: 'A-1' }, { validate: false, unknownKeys: 'error' })
-    ).rejects.toThrow(/Unknown property "ref"/);
+    ).rejects.toThrow(/"ref" is not a JSON name for Order.*mapped to "order_ref".*@JsonAlias\("ref"\)/s);
   });
 
-  it('keeps the old name working properly when @JsonAlias declares it', async () => {
+  it('drops the old key silently under strip and allow alike', async () => {
+    for (const unknownKeys of ['strip', 'allow'] as const) {
+      const order = await toInstance(Order, { ref: 'A-1' }, { validate: false, unknownKeys });
+      expect(order.ref, unknownKeys).toBeUndefined();
+    }
+  });
+
+  it('keeps the old name working when @JsonAlias declares it', async () => {
     class Kept {
       @JsonProperty('order_ref')
       @JsonAlias('ref')
@@ -534,5 +529,54 @@ describe('renaming and the unknown-key policy', () => {
     const kept = await toInstance(Kept, { ref: 'A-1' }, { validate: false });
     expect(kept.ref).toBe('A-1');
     expect(await validate(kept)).toEqual([]);
+  });
+
+  it('refuses a property key that a naming strategy renders differently', async () => {
+    class Account {
+      @IsString() firstName!: string;
+    }
+
+    const snake = { namingStrategy: 'snake_case' as const, validate: false };
+    expect((await toInstance(Account, { firstName: 'Ada' }, snake)).firstName).toBeUndefined();
+    expect((await toInstance(Account, { first_name: 'Ada' }, snake)).firstName).toBe('Ada');
+  });
+
+  // The same protection by a different route: a read-only property that was also renamed was
+  // still settable under its own key.
+  it('blocks the property key of a renamed read-only field', async () => {
+    class Server {
+      @JsonProperty('server_id')
+      @JsonReadOnly()
+      @IsString()
+      id!: string;
+
+      @IsString() name!: string;
+    }
+
+    const server = await toInstance(
+      Server,
+      { id: 'client-supplied', server_id: 'also-client-supplied', name: 'x' },
+      { validate: false }
+    );
+
+    expect(server.id).toBeUndefined();
+    expect(server.name).toBe('x');
+  });
+
+  // A key one property no longer answers to may be exactly what another property is called.
+  it('still maps a key that another property legitimately claims', async () => {
+    class Shuffled {
+      @JsonProperty('other')
+      @IsString()
+      a!: string;
+
+      @JsonAlias('a')
+      @IsString()
+      b!: string;
+    }
+
+    const shuffled = await toInstance(Shuffled, { other: 'x', a: 'y' }, { validate: false });
+    expect(shuffled.a).toBe('x');
+    expect(shuffled.b).toBe('y');
   });
 });
