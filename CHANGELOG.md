@@ -1,0 +1,252 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.0] - 2026-08-04
+
+> The project stays on 0.x while nothing has been published: under semver that signals the
+> API may still move, which is honest for software with no real-world users. A breaking
+> change is therefore a minor bump, which is why this is 0.2.0 rather than 2.0.0.
+
+**Breaking.** Cereale moves to TC39 standard decorators, which is what makes validation rules
+type-checked against the fields they are attached to.
+
+### The headline
+
+A rule that does not fit its field is now a compile error:
+
+```ts
+class User {
+  @IsString() name!: string;   // fine
+  @IsString() age!: number;    // Type 'number' is not assignable to type 'string'
+}
+```
+
+Legacy decorators receive `(target: any, key: string)` and lose the field's type entirely, so
+this was impossible in v1. Standard decorators receive `ClassFieldDecoratorContext<This, Value>`,
+which carries it. Checked rules include:
+
+- scalar rules against scalar fields (`@Min` on a string is rejected)
+- `{ each: true }` against arrays (`@IsString({ each: true })` demands a `string[]`, and a bare
+  `@IsString()` on a `string[]` is rejected)
+- `@JsonType(() => Address)` against the field's class
+- `@JsonSerialize` / `@JsonDeserialize` against the field's type
+- `@IsIn([...])` and `@IsEnum(E)` against the field's value type
+
+17 tests invoke the real compiler to assert these stay rejected.
+
+### Migration
+
+- Remove `"experimentalDecorators": true`; add `"ESNext.Decorators"` to `lib`.
+- `registerDecorator({ target, propertyName, validator })` is replaced by
+  `defineRule(Class, 'field', constraint)`.
+- Decorators cannot be applied to `abstract` fields. Declare the field concretely in the base.
+- Field types may need tightening where a rule narrows them: `@IsIn(['a','b']) x!: string`
+  becomes `x!: 'a' | 'b'`.
+- `@JsonPolymorphic` takes its base type explicitly to check subtypes:
+  `@JsonPolymorphic<Media>('type', [...])`.
+- `@ValidateIf` takes the class as a type argument: `@ValidateIf<Movie>(m => ...)`.
+
+Everything else — the engine, options, naming strategies, access control, error helpers, the
+sync API — is unchanged.
+
+### Removed
+
+- `metadata-storage.ts` and its WeakMap singleton. Metadata now lives on `context.metadata`,
+  the language's own mechanism, which also removes the dual ESM/CJS double-singleton hazard.
+- `registerDecorator`, replaced by `defineRule`.
+
+### Fixed
+
+- Inheritance merging is now structural rather than reconstructed: `context.metadata` inherits
+  through the prototype chain, so the subclass-shadowing defect fixed by hand in 0.1.0 cannot
+  reoccur by construction. Identical inherited rules are still collapsed so re-stating a rule
+  on an override does not double-report.
+
+### Toolchain
+
+Standard decorators are transformed by `tsc` and by esbuild; **oxc does not implement them
+yet**. The library builds with `tsc` and consumers bundling with esbuild or Vite are fine, but
+the test runner (Vitest 4, which uses oxc) needs an esbuild transform plugin — see
+`vitest.config.ts`. Projects on an oxc-based toolchain should stay on 0.1.x for now.
+
+## [0.1.0] - 2026-08-05
+
+### Added
+
+**Synchronous API.** `validateSync`, `validateOrRejectSync`, `toPlainSync`, `toJsonSync`,
+`toInstanceSync`, `toInstanceArraySync`, `fromJsonSync` and `fromJsonArraySync`. Nothing on
+the default path is genuinely asynchronous — only a user-supplied serializer, deserializer or
+validator can be — so requiring `await` everywhere was a tax on the common case.
+
+The engines are now written synchronously, and anything a hook makes asynchronous is recorded
+and reconciled once at the end. There is no second copy of the traversal logic to keep in
+step, and the async entry points stop paying for a microtask per property. If a hook does
+return a Promise, the `*Sync` call raises a `JsonMappingError` naming the async alternative
+rather than silently returning a half-built object.
+
+`fromRequest` has no synchronous counterpart, because reading a request body is inherently
+asynchronous.
+
+- `maxDepth` option (default 64) on every mapping function and on `configure()`. All three
+  engines recurse, so a hostile payload nested thousands of levels deep could exhaust the
+  call stack; it now raises a `JsonMappingError`. Cycles were already handled, but legitimate
+  deep nesting was not bounded.
+- `validate(obj, options?)` accepts options, so `maxDepth` applies to standalone validation.
+- `REDACTED` export, the placeholder substituted for withheld values.
+
+### Security
+
+- **Validation errors no longer carry the value of a property that is never serialized.**
+  A `@JsonWriteOnly` password that failed `@MinLength` put the rejected password into
+  `ValidationError.value`, and from there into any log that recorded the error. Values for
+  `@JsonWriteOnly` and `@JsonIgnore` properties are replaced with `REDACTED`; the property
+  name and the failure message are unchanged, so the error is still actionable.
+
+### Performance
+
+Profiling the validator showed roughly **half of all validation time** was spent re-deriving
+answers that cannot change: `collectConstraints` (22%), `getOwnMetadata` (12%),
+`getMetadataChain` (9%), `getProperties` (4%) and `getMetadata` (3%), plus 8% garbage
+collection from the allocation churn. The constraint predicates themselves accounted for
+under 1%.
+
+Decorator metadata is fixed once classes are declared, so the derived structures are now
+memoized per prototype — the validation plan, the serialization plan, the deserialization
+plan, and serializer/deserializer instances (previously constructed fresh for every property
+of every object). `MetadataStorage` carries a version counter that invalidates every cache
+if metadata is registered late, so `registerDecorator` after first use still works.
+
+Together with the synchronous core, measured on a customer record with a nested address and
+orders, against `JSON.parse` + `JSON.stringify` (5.8 us) as a fixed reference point:
+
+| Operation | 0.1.0 | Now | Speedup |
+| --- | --- | --- | --- |
+| `validate` (50 orders) | 221.6 us | 17.8 us | 12.4x |
+| `validate` (10 orders) | 47.8 us | 4.5 us | 10.6x |
+| `toPlain` (50 orders) | 294.4 us | 36.0 us | 8.2x |
+| `toInstance` (50 orders) | 255.1 us | 31.7 us | 8.0x |
+| `toInstance` (10 orders) | 64.6 us | 8.2 us | 7.9x |
+| `toInstance` (single) | 19.8 us | 5.2 us | 3.8x |
+
+### Changed
+
+- `each: true` failures now report which element failed — `"... (failed at index 3)"`. A bad
+  entry in a 200-item array previously produced a message that could not locate it. A message
+  function now receives the failing element as `args.value` rather than the whole array;
+  caller-supplied string messages are still reported verbatim.
+
+## [0.1.0] - 2026-08-03
+
+The first release with a working test suite. Everything below the "Fixed" heading was
+found by writing tests against the previous release; the suite has grown from 40 tests
+that never executed to 136 that do.
+
+### Added
+
+**Field-name mapping.** A library whose headline feature is "JSON mapping" could not map
+a name. It can now.
+
+- `@JsonProperty(name)` renames a property in both directions.
+- `@JsonAlias(...names)` accepts extra names on input only, so a field can be renamed
+  without breaking older clients.
+- Naming strategies — `snake_case`, `kebab-case`, `SCREAMING_SNAKE_CASE`, `PascalCase`,
+  `camelCase`, or your own function — applied to properties with no explicit name.
+  Acronyms split where a reader expects: `parseHTTPResponse` → `parse_http_response`.
+
+**Access control.**
+
+- `@JsonIgnore()` — excluded in both directions.
+- `@JsonWriteOnly()` — accepted from input, never echoed back (passwords).
+- `@JsonReadOnly()` — serialized, never settable by a client (server-owned ids).
+
+**Transform options**, per call or globally via `configure()`.
+
+- `validate: false` maps without validating, for lenient parsing.
+- `unknownKeys: 'allow' | 'strip' | 'error'` decides what happens to undeclared keys.
+- `namingStrategy` selects the JSON naming convention.
+
+**Error ergonomics.** Turning the nested `ValidationError` tree into an HTTP 400 body used
+to be the caller's problem.
+
+- `flattenErrors(errors)` → `{ "items[0].qty": ["qty must be at least 1"] }`
+- `formatErrors(errors)` → one human-readable line per failure
+- `collectErrorMessages(errors)` → just the messages
+- `validateOrReject(obj)` throws instead of returning an array you might forget to check
+
+**30 validation decorators.** `@Equals`, `@NotEquals`, `@IsEmpty`, `@IsEnum`, `@IsInstance`,
+`@Length`, `@IsAlpha`, `@IsAlphanumeric`, `@IsNumberString`, `@IsLowercase`, `@IsUppercase`,
+`@Contains`, `@NotContains`, `@StartsWith`, `@EndsWith`, `@IsUUID`, `@IsJSON`,
+`@IsDateString`, `@IsSemVer`, `@IsHexColor`, `@IsIP`, `@IsDivisibleBy`, `@IsPort`,
+`@IsLatitude`, `@IsLongitude`, `@IsBigInt`, `@MinDate`, `@MaxDate`, `@ArrayUnique`,
+`@ArrayContains`, `@ArrayNotContains`.
+
+**Conditional validation.** `@ValidateIf(o => ...)` makes a property's rules depend on the
+rest of the object; `@Allow()` declares a property that needs no rules of its own.
+
+**Correctly typed array entry points.** `toInstanceArray()` and `fromJsonArray()`.
+`toInstance`/`fromJson` accept arrays at runtime but type the result as `T`, so callers had
+to cast to reach the elements.
+
+**`@JsonPolymorphic` options.** `{ onUnknown: 'error' }` and `{ fallback: SomeClass }`.
+
+**`JsonMappingError`** — raised when a value cannot be mapped at all, as distinct from
+mapping fine and failing validation.
+
+### Fixed
+
+- **Inheritance silently discarded base-class rules.** A subclass re-decorating an inherited
+  property registered its constraints against its own prototype, and the engine read only the
+  nearest set. Constraints now merge down the whole prototype chain, base first. The
+  library's own example was affected: `Media`'s `@IsString() title` had never been enforced
+  for `Book`.
+- **A circular reference exhausted the heap.** `serialize()` recursed forever, taking 8 GB
+  and the process with it. It now raises a `JsonMappingError` naming the cause. Diamonds
+  still serialize; `validate()` skips back-edges.
+- **`@Matches` with a `g` or `y` flag was stateful.** `RegExp.test` advances `lastIndex`, so
+  validating the same value twice gave different answers. Those flags are stripped.
+- **An unmatched `@JsonPolymorphic` discriminator silently dropped the value.** The
+  single-object branch fell through without assigning; the property came back `undefined`.
+  The raw value is now preserved.
+- **`@JsonSerialize` serializers ran on `null`/`undefined`**, crashing on any unset optional
+  property. They now only see real values.
+- **`serialize()` crashed on null-prototype objects.** It read `obj.constructor.prototype`;
+  both engines now agree on `Object.getPrototypeOf`.
+- **`__proto__`, `constructor` and `prototype` in untrusted JSON** were copied onto the
+  instance, detaching it from its own class. They are dropped.
+- **Caller-supplied messages were mangled** by the `each element in ...` prefix, producing
+  sentences like "each element in tags must all be strings".
+- **Two rules sharing a name overwrote each other**, so only one failure was ever reported.
+- **`fromRequest` leaked a raw `SyntaxError`** for a non-JSON body; it now reports a
+  `JsonMappingError`.
+- **`@ValidateNested({ each: true })`** was documented in the README but did not compile —
+  `ValidateNested()` accepted no arguments. It now does, and asserts the value is an array.
+
+### Changed
+
+- `toPlain`, `toJson`, `toInstance`, `fromJson`, `fromJsonArray`, `toInstanceArray` and
+  `fromRequest` accept an optional trailing options argument. All defaults preserve the
+  previous behaviour.
+- `src/example.ts` is no longer published in `dist`. It called `runExample()` at import
+  time — an import side effect in a package declaring `"sideEffects": false`.
+- Minimum supported Node is 20.
+
+### Infrastructure
+
+- **The test suite had never run.** Vitest 4 transpiles with oxc, which does not read
+  `experimentalDecorators` from a tsconfig that excludes the files it is transforming, so
+  every decorator-using suite failed to parse and was reported as "0 test" rather than as an
+  error. A `vitest.config.ts` enabling legacy decorators brought all 40 existing tests back
+  to life.
+- Test files are now type-checked, which surfaced 17 strict-mode errors.
+- CI runs lint, coverage tests, build and ESM/CJS entry-point smoke checks across Node
+  20/22/24, and `npm ci` works because `package-lock.json` is committed.
+- `npm run build:docs` regenerates the previously hand-maintained `docs/cereale.js`.
+
+## [0.0.1]
+
+Initial release: mapping and validation decorators, polymorphic types, custom
+serializers/deserializers, and the `toJson` / `fromJson` / `toPlain` / `toInstance` API.

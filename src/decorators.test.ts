@@ -13,7 +13,7 @@ import {
   ArrayMaxSize, 
   IsNotIn, 
   Validate, 
-  registerDecorator,
+  defineRule,
   JsonType,
   JsonPolymorphic,
   JsonMapper,
@@ -238,27 +238,20 @@ describe('Additional Decorators', () => {
       t.val = 'wrong';
       const errors = await JsonMapper.validate(t);
       expect(errors).toHaveLength(1);
-      expect(errors[0].constraints['CustomValidator']).toBe('val must be correct');
+      expect(errors[0]!.constraints['CustomValidator']).toBe('val must be correct');
     });
   });
 
   describe('registerDecorator', () => {
     it('should register a custom decorator with functional validator', async () => {
-      function IsEven() {
-        return function (object: any, propertyName: string) {
-          registerDecorator({
-            name: 'isEven',
-            target: object.constructor,
-            propertyName: propertyName,
-            validator: (value: any) => typeof value === 'number' && value % 2 === 0,
-          });
-        };
-      }
-
       class Test {
-        @IsEven()
-        val: number;
+        val: number = 0;
       }
+      defineRule(Test, 'val', {
+        name: 'isEven',
+        validate: (value: any) => typeof value === 'number' && value % 2 === 0,
+        message: 'val must be even',
+      });
 
       const t = new Test();
       t.val = 2;
@@ -271,19 +264,15 @@ describe('Additional Decorators', () => {
       class MyValidator implements ValidatorConstraintInterface {
         validate(v: any) { return v === 'ok'; }
       }
-      function IsOk() {
-        return function (object: any, propertyName: string) {
-          registerDecorator({
-            name: 'isOk',
-            target: object.constructor,
-            propertyName: propertyName,
-            validator: MyValidator,
-          });
-        };
-      }
       class Test {
-        @IsOk() val: string;
+        val: string = '';
       }
+      const validator = new MyValidator();
+      defineRule(Test, 'val', {
+        name: 'isOk',
+        validate: (v: any) => validator.validate(v),
+        message: 'val must be ok',
+      });
       const t = new Test();
       t.val = 'ok';
       expect(await JsonMapper.validate(t)).toHaveLength(0);
@@ -304,7 +293,7 @@ describe('Additional Decorators', () => {
       t.val = 5;
       const errors = await JsonMapper.validate(t);
       expect(errors).toHaveLength(1);
-      expect(errors[0].constraints['custom']).toBe('must be ten');
+      expect(errors[0]!.constraints['custom']).toBe('must be ten');
     });
 
     it('should handle options as second argument', async () => {
@@ -318,7 +307,7 @@ describe('Additional Decorators', () => {
       t.val = 2;
       const errors = await JsonMapper.validate(t);
       expect(errors).toHaveLength(1);
-      expect(errors[0].constraints['custom']).toBe('must be one');
+      expect(errors[0]!.constraints['custom']).toBe('must be one');
     });
   });
 
@@ -339,10 +328,10 @@ describe('Additional Decorators', () => {
         name: string;
       }
       const json = '[{"name": "a"}, {"name": "b"}]';
-      const items = await JsonMapper.fromJson(Item, json);
+      const items = (await JsonMapper.fromJson(Item, json)) as unknown as Item[];
       expect(Array.isArray(items)).toBe(true);
       expect(items[0]).toBeInstanceOf(Item);
-      expect(items[0].name).toBe('a');
+      expect(items[0]!.name).toBe('a');
     });
 
     it('should handle single polymorphic object', async () => {
@@ -350,7 +339,7 @@ describe('Additional Decorators', () => {
         @IsString() type: string;
       }
       class Dog extends Animal {
-        type = 'dog';
+        override type = 'dog';
         @IsString() breed: string;
       }
       class Test {
@@ -376,7 +365,7 @@ describe('Additional Decorators', () => {
       t.tags = ['a', 1 as any];
       const errors = await JsonMapper.validate(t);
       expect(errors).toHaveLength(1);
-      expect(errors[0].constraints['isString']).toContain('each element');
+      expect(errors[0]!.constraints['isString']).toContain('each element');
     });
   });
 });

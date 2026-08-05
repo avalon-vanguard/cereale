@@ -41,16 +41,18 @@ class DateDeserializer implements JsonDeserializer<string, Date> {
 
 // --- Domain Models ---
 abstract class Media {
+  // Standard decorators cannot be applied to an `abstract` member, so the base declares a
+  // concrete field the subclasses override.
   @IsString()
-  abstract type: string;
+  type: string = '';
 
   @IsString()
-  title: string;
+  title: string = '';
 }
 
 class Book extends Media {
   @IsString()
-  type: string = 'book';
+  override type: string = 'book';
 
   @IsString()
   author: string;
@@ -63,7 +65,7 @@ class Book extends Media {
 
 class Movie extends Media {
   @IsString()
-  type: string = 'movie';
+  override type: string = 'movie';
 
   @IsInt()
   @Min(1)
@@ -162,7 +164,7 @@ describe('JsonMapper', () => {
 
       @ArrayNotEmpty()
       @IsIn(['admin', 'user', 'guest'], { each: true })
-      roles: string[];
+      roles!: ('admin' | 'user' | 'guest')[];
 
       @IsUrl()
       @IsOptional()
@@ -202,8 +204,8 @@ describe('JsonMapper', () => {
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(1);
-      expect(errors[0].property).toBe('username');
-      expect(errors[0].constraints).toHaveProperty('minLength');
+      expect(errors[0]!.property).toBe('username');
+      expect(errors[0]!.constraints).toHaveProperty('minLength');
     });
 
     it('should fail on invalid email', async () => {
@@ -215,8 +217,8 @@ describe('JsonMapper', () => {
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(1);
-      expect(errors[0].property).toBe('email');
-      expect(errors[0].constraints).toHaveProperty('isEmail');
+      expect(errors[0]!.property).toBe('email');
+      expect(errors[0]!.constraints).toHaveProperty('isEmail');
     });
 
     it('should fail on invalid role (IsIn)', async () => {
@@ -224,12 +226,12 @@ describe('JsonMapper', () => {
       user.username = 'johndoe';
       user.email = 'john@example.com';
       user.active = true;
-      user.roles = ['superadmin'];
+      user.roles = ['superadmin' as 'admin'];
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(1);
-      expect(errors[0].property).toBe('roles');
-      expect(errors[0].constraints).toHaveProperty('isIn');
+      expect(errors[0]!.property).toBe('roles');
+      expect(errors[0]!.constraints).toHaveProperty('isIn');
     });
 
     it('should skip validation for null optional field', async () => {
@@ -238,7 +240,7 @@ describe('JsonMapper', () => {
       user.email = 'john@example.com';
       user.active = true;
       user.roles = ['user'];
-      user.age = undefined; // optional
+      delete user.age; // optional
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(0);
@@ -254,8 +256,8 @@ describe('JsonMapper', () => {
 
       const errors = await JsonMapper.validate(user);
       expect(errors).toHaveLength(1);
-      expect(errors[0].property).toBe('age');
-      expect(errors[0].constraints).toHaveProperty('min');
+      expect(errors[0]!.property).toBe('age');
+      expect(errors[0]!.constraints).toHaveProperty('min');
     });
   });
 });

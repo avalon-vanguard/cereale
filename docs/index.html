@@ -136,10 +136,21 @@
                     <div>
                         <h3 class="font-bold text-lg mb-4 text-indigo-600">Mapping</h3>
                         <ul class="space-y-2 text-slate-600">
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonProperty('first_name')</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonAlias(...names)</code></li>
                             <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonSerialize(cls)</code></li>
                             <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonDeserialize(cls)</code></li>
                             <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonType(() => cls)</code></li>
                             <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonPolymorphic(field, types)</code></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg mb-4 text-indigo-600">Access Control</h3>
+                        <ul class="space-y-2 text-slate-600">
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonIgnore()</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonReadOnly()</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@JsonWriteOnly()</code></li>
+                            <li class="text-sm pt-2">Naming strategies: <code class="text-sm bg-slate-100 p-1 rounded">snake_case</code>, <code class="text-sm bg-slate-100 p-1 rounded">kebab-case</code>, …</li>
                         </ul>
                     </div>
                     <div>
@@ -158,7 +169,9 @@
                             <li><code class="text-sm bg-slate-100 p-1 rounded">@Min(n)</code>, <code class="text-sm bg-slate-100 p-1 rounded">@Max(n)</code></li>
                             <li><code class="text-sm bg-slate-100 p-1 rounded">@MinLength(n)</code>, <code class="text-sm bg-slate-100 p-1 rounded">@MaxLength(n)</code></li>
                             <li><code class="text-sm bg-slate-100 p-1 rounded">@Email()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsUrl()</code></li>
-                            <li><code class="text-sm bg-slate-100 p-1 rounded">@ValidateNested()</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@IsUUID(v?)</code>, <code class="text-sm bg-slate-100 p-1 rounded">@IsEnum(e)</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@MinDate(d)</code>, <code class="text-sm bg-slate-100 p-1 rounded">@ArrayUnique()</code></li>
+                            <li><code class="text-sm bg-slate-100 p-1 rounded">@ValidateNested()</code>, <code class="text-sm bg-slate-100 p-1 rounded">@ValidateIf(fn)</code></li>
                         </ul>
                     </div>
                 </div>
@@ -175,9 +188,10 @@
     <script>
         const initialCode = `// 1. Define your model with decorators
 class User {
+  @JsonProperty('display_name')
   @IsString()
   @MinLength(3)
-  name;
+  displayName;
 
   @IsInt()
   @Min(18)
@@ -186,26 +200,36 @@ class User {
   @Email()
   email;
 
-  constructor(name, age, email) {
-    this.name = name;
+  // Accepted from a request, never sent back out
+  @JsonWriteOnly()
+  @IsString()
+  password;
+
+  constructor(displayName, age, email, password) {
+    this.displayName = displayName;
     this.age = age;
     this.email = email;
+    this.password = password;
   }
 }
 
 async function demo() {
-  console.log("--- Validating valid user ---");
-  const user = new User("Alice", 25, "alice@example.com");
-  const json = await JsonMapper.toJson(user);
+  console.log("--- Mapping a valid user ---");
+  const user = new User("Alice", 25, "alice@example.com", "hunter2");
+  const json = await toJson(user);
   console.log("JSON Output:", json);
+  console.log("Password withheld:", !json.includes("hunter2"));
 
-  console.log("\\n--- Testing validation failure ---");
+  console.log("\\n--- Reading it back ---");
+  const parsed = await fromJson(User, json, { validate: false });
+  console.log("displayName read from display_name:", parsed.displayName);
+
+  console.log("\\n--- Reporting validation failures ---");
   try {
-    const invalidJson = '{"name": "Bo", "age": 15, "email": "not-an-email"}';
-    await JsonMapper.fromJson(User, invalidJson);
+    await fromJson(User, '{"display_name": "Bo", "age": 15, "email": "nope", "password": "x"}');
   } catch (error) {
-    console.log("Caught Error:", error.message);
-    console.log("Validation Errors:", JSON.stringify(error.errors, null, 2));
+    console.log("Caught:", error.message);
+    console.log("Flattened:", flattenErrors(error.errors));
   }
 }
 
@@ -247,36 +271,12 @@ demo();`;
                     ]
                 }).code;
 
-                // Create a function with the library symbols in scope
-                const { 
-                    IsString, IsInt, Min, Max, IsEmail, IsArray, IsDate, IsOptional, ValidateNested, 
-                    IsBoolean, IsNumber, IsObject, IsDefined, IsNotEmpty, MinLength, MaxLength,
-                    Email, IsUrl, Matches, ArrayMinSize, ArrayMaxSize, ArrayNotEmpty, IsIn, IsNotIn,
-                    Positive, Negative,
-                    JsonSerialize, JsonDeserialize, JsonPolymorphic, JsonType, JsonMapper, 
-                    JsonValidationError 
-                } = Cereale;
+                // Put every library export in scope. Derived from the bundle rather than
+                // hand-listed, so a new decorator is usable here the moment it is exported.
+                const exportNames = Object.keys(Cereale).filter(name => /^[A-Za-z_$][\w$]*$/.test(name));
 
-                const run = new Function(
-                    'console', 
-                    'IsString', 'IsInt', 'Min', 'Max', 'IsEmail', 'IsArray', 'IsDate', 'IsOptional', 'ValidateNested',
-                    'IsBoolean', 'IsNumber', 'IsObject', 'IsDefined', 'IsNotEmpty', 'MinLength', 'MaxLength',
-                    'Email', 'IsUrl', 'Matches', 'ArrayMinSize', 'ArrayMaxSize', 'ArrayNotEmpty', 'IsIn', 'IsNotIn',
-                    'Positive', 'Negative',
-                    'JsonSerialize', 'JsonDeserialize', 'JsonPolymorphic', 'JsonType', 'JsonMapper', 
-                    'JsonValidationError',
-                    transpiled
-                );
-
-                await run(
-                    { log: logToOutput },
-                    IsString, IsInt, Min, Max, IsEmail, IsArray, IsDate, IsOptional, ValidateNested,
-                    IsBoolean, IsNumber, IsObject, IsDefined, IsNotEmpty, MinLength, MaxLength,
-                    Email, IsUrl, Matches, ArrayMinSize, ArrayMaxSize, ArrayNotEmpty, IsIn, IsNotIn,
-                    Positive, Negative,
-                    JsonSerialize, JsonDeserialize, JsonPolymorphic, JsonType, JsonMapper, 
-                    JsonValidationError
-                );
+                const run = new Function('console', ...exportNames, transpiled);
+                await run({ log: logToOutput }, ...exportNames.map(name => Cereale[name]));
             } catch (err) {
                 outputElement.textContent += 'Error: ' + err.message + '\\n';
                 if (err.stack) {

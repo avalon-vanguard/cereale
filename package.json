@@ -1,7 +1,7 @@
 {
   "name": "cereale",
-  "version": "0.0.1",
-  "description": "Spring-like decorators for JSON mapping and validation in TypeScript",
+  "version": "0.2.0",
+  "description": "Strongly typed JSON mapping and validation for TypeScript classes — validated domain objects, not validated data",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -13,19 +13,28 @@
       "require": "./dist/cjs/index.js"
     }
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/esm/metadata.js",
+    "./dist/cjs/metadata.js"
+  ],
   "files": [
     "dist"
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json",
+    "build:docs": "esbuild src/index.ts --bundle --format=iife --global-name=Cereale --minify --tsconfig=tsconfig.json --outfile=docs/cereale.js",
     "demo": "node --no-warnings=ExperimentalWarning --loader ts-node/esm src/example.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "prepublishOnly": "npm run build"
+    "verify": "npm run type-check && npm run lint && npm run test && npm run build",
+    "prepublishOnly": "npm run verify"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   },
   "repository": {
     "type": "git",
@@ -33,11 +42,13 @@
   },
   "keywords": [
     "json",
-    "mapping",
     "validation",
     "decorators",
-    "spring",
-    "typescript"
+    "typescript",
+    "zod-alternative",
+    "dto",
+    "serialization",
+    "class-validator"
   ],
   "author": "Avalon Vanguard",
   "license": "MIT",
@@ -49,6 +60,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.6.0",
     "@vitest/coverage-v8": "^4.1.4",
+    "esbuild": "^0.25.0",
     "eslint": "^10.2.1",
     "globals": "^17.5.0",
     "ts-node": "^10.9.2",

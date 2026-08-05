@@ -1,22 +1,31 @@
-import { 
-  IsString, 
-  IsInt, 
-  Min, 
-  ValidateNested, 
-  IsArray, 
+import {
+  IsString,
+  IsInt,
+  Min,
+  ValidateNested,
+  IsArray,
   IsDate,
-  JsonSerialize, 
-  JsonDeserialize, 
-  JsonPolymorphic, 
+  IsEnum,
+  IsUUID,
+  ValidateIf,
+  JsonProperty,
+  JsonAlias,
+  JsonReadOnly,
+  JsonWriteOnly,
+  JsonSerialize,
+  JsonDeserialize,
+  JsonPolymorphic,
   toJson,
   fromJson,
-  JsonSerializer, 
+  toPlain,
+  validate,
+  flattenErrors,
+  JsonSerializer,
   JsonDeserializer,
   Validate,
   ValidatorConstraintInterface,
   ValidationArguments,
-  registerDecorator,
-  ValidationOptions
+  Matches,
 } from './index.js';
 
 // --- Custom Validators ---
@@ -32,26 +41,14 @@ class IsLongerThan implements ValidatorConstraintInterface {
   }
 }
 
-function IsUsername(options?: ValidationOptions) {
-  return function (object: any, propertyName: string) {
-    registerDecorator({
-      name: 'isUsername',
-      target: object.constructor,
-      propertyName: propertyName,
-      ...(options ? { options } : {}),
-      validator: (value: any) => typeof value === 'string' && /^[a-zA-Z0-9_]+$/.test(value)
-    });
-  };
-}
+/** A custom rule is just a decorator that composes an existing one. */
+const IsSlug = () => Matches(/^[a-z0-9-]+$/, { message: 'name must be a lowercase slug' });
 
 // --- Custom Serializers ---
 
 class DateSerializer implements JsonSerializer<Date, string> {
   serialize(value: Date): string {
-    if (value instanceof Date) {
-      return value.toISOString().split('T')[0] || '';
-    }
-    return String(value);
+    return value.toISOString().split('T')[0] || '';
   }
 }
 
@@ -63,12 +60,20 @@ class DateDeserializer implements JsonDeserializer<string, Date> {
 
 // --- Domain Models ---
 
-abstract class Media {
-  @IsString()
-  abstract type: string;
+enum Format {
+  Hardback = 'hardback',
+  Paperback = 'paperback',
+}
 
+abstract class Media {
+  // Standard decorators cannot be applied to an `abstract` member, so the discriminator is a
+  // concrete field the subclasses override.
   @IsString()
-  title: string;
+  type: string = '';
+
+  // Declared once here. Subclasses inherit the rule without restating it.
+  @IsString()
+  title: string = '';
 }
 
 class Book extends Media {
@@ -76,13 +81,13 @@ class Book extends Media {
   override type: string = 'book';
 
   @IsString()
-  @IsUsername({ message: 'Title must be a valid alphanumeric username' })
-  declare title: string;
-
-  @IsString()
   @Validate(IsLongerThan, [5])
   author: string;
 
+  @IsEnum(Format)
+  format: Format = Format.Paperback;
+
+  @JsonProperty('published_at')
   @JsonSerialize(DateSerializer)
   @JsonDeserialize(DateDeserializer)
   @IsDate()
@@ -91,87 +96,127 @@ class Book extends Media {
 
 class Movie extends Media {
   @IsString()
-  type: string = 'movie';
+  override type: string = 'movie';
 
   @IsInt()
   @Min(1)
   duration: number;
+
+  // Only checked for films that claim to be part of a series.
+  @ValidateIf<Movie>(movie => movie.duration > 200)
+  @IsString()
+  intermissionNote?: string;
 }
 
 class Library {
+  @JsonReadOnly()
+  @IsUUID(4)
+  id: string;
+
   @IsString()
+  @IsSlug()
   name: string;
 
+  @JsonProperty('curator_email')
+  @JsonAlias('curatorEmail')
+  @IsString()
+  curatorEmail: string;
+
+  @JsonWriteOnly()
+  @IsString()
+  adminToken: string;
+
   @IsArray()
-  @ValidateNested()
-  @JsonPolymorphic('type', [
+  @ValidateNested({ each: true })
+  // Naming the base type has the subtype list checked against it.
+  @JsonPolymorphic<Media>('type', [
     { value: Book, name: 'book' },
     { value: Movie, name: 'movie' }
   ])
-  items: Media[];
+  items: Media[] = [];
 }
 
 // --- Execution ---
 
 async function runExample() {
-  console.log("--- Starting Example ---");
+  console.log('--- Starting Example ---');
 
-  // 1. Create a Library instance
   const library = new Library();
-  library.name = "Central Library";
-  
+  library.id = '9b2e4c1a-77bd-4f2e-8c33-1d9a6b0e5f21';
+  library.name = 'central-library';
+  library.curatorEmail = 'ada@example.com';
+  library.adminToken = 'super-secret';
+
   const book = new Book();
-  book.title = "Gatsby";
-  book.author = "Fitzgerald";
-  book.publishedAt = new Date("1925-04-10");
+  book.title = 'Gatsby';
+  book.author = 'Fitzgerald';
+  book.format = Format.Hardback;
+  book.publishedAt = new Date('1925-04-10');
 
   const movie = new Movie();
-  movie.title = "Inception";
+  movie.title = 'Inception';
   movie.duration = 148;
 
   library.items = [book, movie];
 
-  try {
-    // 2. Serialize to JSON
-    console.log("\n[1] Serializing Library to JSON...");
-    const json = await toJson(library);
-    console.log("JSON Output:", json);
+  // 1. Serialize, honouring @JsonProperty and the write-only token
+  console.log('\n[1] Serializing Library to JSON...');
+  const json = await toJson(library);
+  console.log('JSON Output:', json);
+  console.log('Secret withheld from output:', !json.includes('super-secret'));
 
-    // 3. Deserialize back to Instance
-    console.log("\n[2] Deserializing JSON back to Library instance...");
-    const deserializedLibrary = await fromJson(Library, json);
-    console.log("Deserialized Library Name:", deserializedLibrary.name);
-    console.log("Items count:", deserializedLibrary.items.length);
-
-    // Check Polymorphism
-    deserializedLibrary.items.forEach((item, index) => {
-      console.log(`Item ${index} is instance of ${item.constructor.name}: ${item.title}`);
-      if (item instanceof Book) {
-        console.log(`  > Book Author: ${item.author}`);
-        console.log(`  > Published At: ${item.publishedAt.toISOString()} (instanceof Date: ${item.publishedAt instanceof Date})`);
-      } else if (item instanceof Movie) {
-        console.log(`  > Movie Duration: ${item.duration} mins`);
-      }
-    });
-
-    // 4. Test Validation Failure
-    console.log("\n[3] Testing Validation Failure (Invalid Movie Duration)...");
-    const invalidJson = JSON.stringify({
-      name: "Invalid Library",
-      items: [
-        { type: "movie", title: "Short Film", duration: -5 } // Invalid: duration < 1
-      ]
-    });
-
-    await fromJson(Library, invalidJson);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.log("Caught expected error:", error.message);
-      if ((error as any).errors) {
-        console.log("Validation details:", JSON.stringify((error as any).errors, null, 2));
-      }
+  // 2. Deserialize back, resolving the polymorphic items
+  console.log('\n[2] Deserializing JSON back to Library instance...');
+  const restored = await fromJson(Library, json, { validate: false });
+  console.log('Curator (read via curator_email):', restored.curatorEmail);
+  console.log('Items count:', restored.items.length);
+  restored.items.forEach((item, index) => {
+    console.log(`Item ${index} is a ${item.constructor.name}: ${item.title}`);
+    if (item instanceof Book) {
+      console.log(`  > Author: ${item.author}, format: ${item.format}`);
+      console.log(`  > Published: ${item.publishedAt.toISOString()} (Date: ${item.publishedAt instanceof Date})`);
+    } else if (item instanceof Movie) {
+      console.log(`  > Duration: ${item.duration} mins`);
     }
-  }
+  });
+
+  // 3. A client cannot set a @JsonReadOnly field
+  console.log('\n[3] A client trying to set the read-only id...');
+  const hijacked = await fromJson(
+    Library,
+    JSON.stringify({ id: 'attacker-supplied', name: 'x', curator_email: 'a@b.c', adminToken: 't', items: [] }),
+    { validate: false }
+  );
+  console.log('id after mapping (expected undefined):', hijacked.id);
+
+  // 4. Validation failures, flattened for an HTTP response
+  console.log('\n[4] Reporting validation failures...');
+  const invalid = await fromJson(
+    Library,
+    JSON.stringify({
+      name: 'Not A Slug',
+      curator_email: 'a@b.c',
+      adminToken: 't',
+      items: [{ type: 'movie', title: 'Short Film', duration: -5 }]
+    }),
+    { validate: false }
+  );
+  console.log(flattenErrors(await validate(invalid)));
+
+  // 5. A base-class rule applies to a subclass that never restates it
+  console.log('\n[5] Base-class constraints reach subclasses...');
+  const untitled = new Book();
+  untitled.title = undefined as any;
+  untitled.author = 'Fitzgerald';
+  untitled.publishedAt = new Date('1925-04-10');
+  console.log(flattenErrors(await validate(untitled)));
+
+  // 6. Naming strategies convert every property at once
+  console.log('\n[6] The same movie under snake_case...');
+  console.log(await toPlain(movie, { namingStrategy: 'snake_case' }));
 }
 
-runExample();
+runExample().catch((error) => {
+  console.error('Example failed:', error);
+  process.exitCode = 1;
+});
