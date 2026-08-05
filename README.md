@@ -1,5 +1,15 @@
 # Cereale
 
+> **This is the 1.x maintenance line**, which uses TypeScript's legacy
+> `experimentalDecorators`. It is feature-complete and supported for bug fixes.
+>
+> **New projects should use 2.x**, which moves to TC39 standard decorators and gains
+> compile-time checking of validation rules against field types — `@IsString() age: number`
+> becomes a compile error rather than a runtime surprise.
+>
+> Stay on 1.x if your toolchain transpiles with **oxc**, which does not yet implement the
+> standard decorator transform. `tsc` and esbuild both do, so most projects can move.
+
 Cereale is a lightweight TypeScript library that provides Spring-like decorators for JSON mapping and validation. Built with ZERO external dependencies, it simplifies the process of converting between plain JSON and class instances with full validation support.
 
 ## Features
