@@ -73,8 +73,15 @@ await writeFile(
   `- \`babel.min.js\` — @babel/standalone ${JSON.parse(await readFile(path.join(root, 'node_modules/@babel/standalone/package.json'), 'utf8')).version}, ` +
   `used by the playground to compile TypeScript with standard decorators in the browser. ` +
   `Vendored rather than loaded from a CDN: the previous page referenced an unpinned unpkg URL, ` +
-  `which silently began serving Babel 8 and broke the playground.\n`
+  `which silently began serving Babel 8 and broke the playground.\n\n` +
+  `- \`../.nojekyll\` — opts the directory out of Jekyll, so GitHub Pages serves it verbatim. ` +
+  `Jekyll ignores paths beginning with an underscore and carries default \`vendor/\` exclusions, ` +
+  `and the failure mode is an asset that silently does not publish — for this page, the ` +
+  `playground's compiler 404ing while everything else looks fine.\n`
 );
+
+// 5. Written rather than committed by hand so it cannot be lost in a docs/ rewrite.
+await writeFile(path.join(docs, '.nojekyll'), '');
 
 console.log(`docs/cereale.js       ${await size(path.join(docs, 'cereale.js'))}`);
 console.log(`docs/meta.js          ${await size(path.join(docs, 'meta.js'))}  (v${pkg.version})`);
