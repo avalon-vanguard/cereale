@@ -447,3 +447,92 @@ describe('a realistic API payload', () => {
     expect(response).not.toContain('hunter2');
   });
 });
+
+describe('renaming and the unknown-key policy', () => {
+  class Address {
+    @IsString() city!: string;
+  }
+
+  class Order {
+    @JsonProperty('order_ref')
+    @IsString()
+    ref!: string;
+
+    @JsonProperty('home_address')
+    @JsonType(() => Address)
+    @ValidateNested()
+    address!: Address;
+  }
+
+  /**
+   * A sharp edge, pinned here rather than fixed, because the fix is a judgement call the
+   * library has not made yet.
+   *
+   * `@JsonReadOnly` puts its JSON name in the blocked set, so a client cannot set it.
+   * `@JsonProperty` does not do the same for the property's *old* name: that name simply
+   * stops mapping, falls through to the unknown-key policy, and the default `allow` copies
+   * it onto the instance untouched. The value therefore lands on a declared property having
+   * skipped everything declared for it — no `@JsonType` conversion, and `@ValidateNested`
+   * then finds a plain object with no model and reports nothing.
+   *
+   * Blocking the old key would fix that, but it would also swallow the `unknownKeys: 'error'`
+   * report that a strict caller gets today, which is arguably the more useful signal. Until
+   * that is decided, the behaviour is documented in the README and on the landing page, and
+   * asserted here so it cannot change by accident.
+   */
+  it('leaves the old key writable after a rename, under the default policy', async () => {
+    const order = await toInstance(
+      Order,
+      { ref: 'A-1', address: { city: 'Paris' } },
+      { validate: false }
+    );
+
+    expect(order.ref).toBe('A-1');
+    // The conversion declared for the field did not run.
+    expect(order.address).toEqual({ city: 'Paris' });
+    expect(order.address instanceof Address).toBe(false);
+    // And nothing complains about it.
+    expect(await validate(order)).toEqual([]);
+  });
+
+  it('maps the declared names properly, producing real instances', async () => {
+    const order = await toInstance(
+      Order,
+      { order_ref: 'A-1', home_address: { city: 'Paris' } },
+      { validate: false }
+    );
+
+    expect(order.ref).toBe('A-1');
+    expect(order.address instanceof Address).toBe(true);
+  });
+
+  it('drops the old key under unknownKeys: strip', async () => {
+    const order = await toInstance(
+      Order,
+      { ref: 'A-1', address: { city: 'Paris' } },
+      { validate: false, unknownKeys: 'strip' }
+    );
+
+    expect(order.ref).toBeUndefined();
+    expect(order.address).toBeUndefined();
+  });
+
+  it('reports the old key under unknownKeys: error', async () => {
+    await expect(
+      toInstance(Order, { ref: 'A-1' }, { validate: false, unknownKeys: 'error' })
+    ).rejects.toThrow(/Unknown property "ref"/);
+  });
+
+  it('keeps the old name working properly when @JsonAlias declares it', async () => {
+    class Kept {
+      @JsonProperty('order_ref')
+      @JsonAlias('ref')
+      @IsString()
+      ref!: string;
+    }
+
+    const kept = await toInstance(Kept, { ref: 'A-1' }, { validate: false });
+    expect(kept.ref).toBe('A-1');
+    expect(await validate(kept)).toEqual([]);
+  });
+});

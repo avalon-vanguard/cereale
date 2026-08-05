@@ -114,6 +114,25 @@ Also corrected in the same pass: the toolchain table is described as executed by
 the oxc row — the only ✗ — cannot be, because oxc ships inside a native binary with no
 standalone transform API. The claim now covers the three rows it actually covers.
 
+### A sharp edge, now documented and pinned
+
+The README, the landing page and two doc comments all said that once a property carries
+`@JsonProperty`, its original name "is no longer accepted on input". It is no longer
+*mapped* — but it is not rejected either. Unlike `@JsonReadOnly`, whose JSON name goes into
+the blocked set, a renamed property's old key falls through to the unknown-key policy, and
+the default `allow` copies it onto the instance untouched. The value lands on a declared
+property having skipped everything declared for it: no `@JsonType` conversion, so
+`@ValidateNested` then inspects a plain object with no model and reports nothing.
+
+Blocking the old key would fix that, but it would also swallow the `unknownKeys: 'error'`
+report a strict caller gets today, which is arguably the more useful signal. That decision
+has not been made, so the behaviour is stated accurately everywhere it was previously stated
+wrongly, and five tests in `mapping.test.ts` pin it — including the `strip` and `error`
+policies and the `@JsonAlias` fix — so it cannot change by accident either way.
+
+Two reference entries were also imprecise: `@IsNotEmpty()` and `@IsEmpty()` read as
+complements but are not (`[]` and `{}` pass both), and `unknownKeys` is deserialization-only.
+
 ### Positioning
 
 `zod-alternative` is out of the keywords, and the README leads with the comparison that

@@ -68,7 +68,9 @@ function pattern(name: string, regex: RegExp, message: (property: string) => str
  * ```
  *
  * An explicit name always wins over the active naming strategy. Note that renaming stops the
- * original name from being accepted on input — add `@JsonAlias` to keep older clients working.
+ * original name from *mapping* to it. Under the default `unknownKeys: 'allow'` that name is
+ * still copied onto the instance raw, bypassing any `@JsonType` or `@JsonDeserialize` declared
+ * for the field — add `@JsonAlias` to keep older clients working, or set `unknownKeys`.
  */
 export function JsonProperty(name: string): FieldDecorator<unknown> {
   return ((_t: undefined, context: ClassFieldDecoratorContext) => {

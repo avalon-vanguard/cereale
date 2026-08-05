@@ -813,8 +813,13 @@ npm install ../cereale/cereale-0.3.0.tgz</code></pre>
       <div class="notes">
         <div class="note-item">
           <h3>Renaming is not backwards-compatible by itself</h3>
-          <p>Once a property carries <code class="inline-code">@JsonProperty</code>, its original name is
-            no longer accepted on input. Add <code class="inline-code">@JsonAlias</code> to keep older clients working.</p>
+          <p>Once a property carries <code class="inline-code">@JsonProperty</code>, its original name
+            no longer <em>maps</em> to it — but under the default
+            <code class="inline-code">unknownKeys: 'allow'</code> it is not rejected either. It is
+            copied onto the instance raw, skipping any
+            <code class="inline-code">@JsonType</code> or <code class="inline-code">@JsonDeserialize</code>
+            conversion declared for that field. Add <code class="inline-code">@JsonAlias</code> to keep
+            older clients working, or <code class="inline-code">unknownKeys: 'strip'</code> to drop them.</p>
         </div>
         <div class="note-item">
           <h3><code class="inline-code">abstract</code> and <code class="inline-code">accessor</code> fields cannot be decorated</h3>

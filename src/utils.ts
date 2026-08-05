@@ -160,10 +160,15 @@ const inboundCache = new WeakMap<ClassModel, { version: number; byStrategy: Map<
 /**
  * Builds the JSON-name -> property-key lookup used when reading a payload.
  *
- * Only names the class actually declares are accepted: the `@JsonProperty` name (or the
- * naming strategy's rendering of the property name) plus any `@JsonAlias`. Renaming a
- * property therefore stops the old name from being silently accepted — add `@JsonAlias` to
- * keep it working for older clients.
+ * Only names the class actually declares are mapped: the `@JsonProperty` name (or the naming
+ * strategy's rendering of the property name) plus any `@JsonAlias`.
+ *
+ * Note what this does *not* do. A renamed property's old name stops mapping to it, but it is
+ * not blocked — unlike `@JsonReadOnly`, which is. It falls through to the unknown-key policy,
+ * and the default `allow` copies it onto the instance raw, bypassing the `@JsonType` or
+ * `@JsonDeserialize` declared for that field. `renames leave the old key writable` in
+ * mapping.test.ts pins that behaviour; see the note there for why it has not simply been
+ * changed.
  */
 function inboundNameMap(model: ClassModel, ctx: DeserializeContext): InboundNames {
   let entry = inboundCache.get(model);

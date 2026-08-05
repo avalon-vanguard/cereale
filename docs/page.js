@@ -132,8 +132,8 @@
       ["@IsDate()", 'must be a valid Date object'],
       ["@IsObject()", 'must be an object'],
       ["@IsDefined()", 'must not be null or undefined'],
-      ["@IsNotEmpty()", 'must not be empty'],
-      ["@IsEmpty()", 'must be empty']
+      ["@IsNotEmpty()", 'must not be null, undefined or an empty string — [] and {} pass'],
+      ["@IsEmpty()", 'must be null, undefined, an empty string, [] or {}']
     ]],
     ['Numbers', 'Constraints on number fields.', [
       ["@Min(n)", 'must be at least n'],
@@ -218,7 +218,7 @@
     ['Configuration', 'Per call, or once via configure().', [
       ["validate: boolean", 'validate while mapping — default true'],
       ["namingStrategy: strategy", 'identity (default), camelCase, PascalCase, snake_case, SCREAMING_SNAKE_CASE, kebab-case, or your own function'],
-      ["unknownKeys: policy", 'allow (default), strip, or error'],
+      ["unknownKeys: policy", 'allow (default), strip, or error — deserialization only'],
       ["maxDepth: number", 'nesting limit before a JsonMappingError — default 64'],
       ["configure(options)", 'sets the library-wide defaults'],
       ["getConfig()", 'reads the defaults currently in force'],
