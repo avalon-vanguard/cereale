@@ -108,6 +108,20 @@ inside a native binary with no standalone transform API.
 | swc | ✅ | `jsc.transform.decoratorVersion: "2022-03"` |
 | **oxc** | ❌ | Used by **Vite 8** and **Vitest 4** — see below |
 
+### Frameworks
+
+**[FRAMEWORKS.md](FRAMEWORKS.md)** has a setup recipe for each, every one of them run before it
+was written. The short version:
+
+| | | |
+| --- | --- | --- |
+| **Angular** 21 | ✅ | Flip the scaffolded `experimentalDecorators` to `false`. Angular does not need it — `ngtsc` erases its own decorators itself |
+| **React, Vue, Svelte, Solid, Astro, Nuxt** | ✅ | Any Vite 8 app: add the `cereale/vite` plugin below |
+| **Bun** | ✅ | No configuration |
+| **Node** + `tsc` | ✅ | Just the flag |
+| **Next.js** 16 | ⚠️ | Not inline: it derives both the SWC parser *and* the transform from one flag, so decorators either compile legacy or fail to parse. Keep your models in a package compiled by `tsc` |
+| **NestJS** 11 | ⚠️ | Not inline: its DI needs `emitDecoratorMetadata`. Same precompiled-package route — verified working alongside `@Injectable()` in a program with both legacy flags on |
+
 **If you are on Vite 8 or Vitest 4**, oxc leaves decorator syntax in the output without
 reporting anything: `vitest` prints `0 test` next to a bare `SyntaxError`, and `vite build`
 reports success while emitting a bundle that throws the moment it is imported. Cereale ships

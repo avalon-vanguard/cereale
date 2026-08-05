@@ -5,6 +5,63 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-05
+
+### `cereale/min` — one file, no bundler
+
+The whole library flattened into a single minified ES module: **25.5 KB, 8.6 KB gzipped**, for
+import maps, `<script type="module">`, Deno and Workers. It is built from `dist/esm/index.js`,
+so the decorator lowering and the ES2025 target are whatever `tsc` produced — esbuild only
+flattens and minifies.
+
+It is an addition, not a replacement, and the measurement is why. Bundled through esbuild the
+flat and per-module builds produce consumer bundles within **2 bytes** of each other; through
+rollup + terser the flat one is 165 bytes smaller; unused decorators tree-shake out of both.
+Since the size argument is a wash, the per-module build stays the default `import` for the one
+thing it does better — readable stack traces for anyone not loading source maps.
+
+### Frameworks
+
+[FRAMEWORKS.md](FRAMEWORKS.md) — a setup recipe for each, every one run before it was written,
+with the versions and date it was verified against.
+
+The finding worth stating first: **Angular works**. The CLI scaffolds
+`"experimentalDecorators": true`, but Angular does not need it — `ngtsc` erases `@Component`
+and `@Injectable` into static properties rather than relying on TypeScript's decorator emit.
+Flip the flag and both systems work in one program. Verified with `ngc` on Angular 21.2 with
+`strictTemplates`: templates still type-check, and a wrong cereale rule is still a compile
+error inside the Angular build.
+
+**Next.js cannot work inline**, and the reason is structural rather than a missing option. It
+derives *both* the SWC parser's decorator support and the transform mode from the single
+`experimentalDecorators` flag, so the flag on gives legacy emit that cereale refuses, and the
+flag off makes `@` a syntax error. There is no third setting.
+
+**NestJS cannot work inline** either: its dependency injection genuinely needs the
+`design:type` metadata only `emitDecoratorMetadata` produces.
+
+Both have the same answer, and it is better than it sounds: put the cereale classes in a
+package compiled by `tsc` and import the built output. The decorators run at class-definition
+time inside that package, so the app only ever sees plain JavaScript and its own decorator
+setting stops mattering. Verified inside a program with **both** legacy flags on, running
+alongside `@Injectable()` — mapping and validation work normally, and the compile-time
+guarantee still holds where the rules are written.
+
+Also verified: **Bun** 1.3 needs no configuration at all, and a real Vite 8 build with the
+`cereale/vite` plugin produces working output where the same build without it silently leaves
+decorator syntax in the bundle.
+
+### Packaging
+
+`FRAMEWORKS.md` ships with the package. `sideEffects` now lists the flat bundle, which inlines
+the `Symbol.metadata` install.
+
+### Why 0.4.0 and not 0.3.1
+
+`cereale/min` is a new public entry point, which is a minor bump under 0.x. It also keeps the
+existing `v0.3.0` tag meaningful instead of force-moving it onto a commit it was never cut
+from.
+
 ## [0.3.0] - 2026-08-05
 
 Every change here comes from the same question: where does cereale currently fail *quietly*?

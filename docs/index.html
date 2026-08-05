@@ -271,6 +271,7 @@ header.nav {
 .panel p { color: var(--text-muted); font-size: .9375rem; margin: 0; }
 .tick { color: var(--ok); font-weight: 700; }
 .cross { color: var(--bad); font-weight: 700; }
+.warn-mark { color: var(--warn); font-weight: 700; }
 
 .compare { display: grid; gap: 1rem; }
 @media (min-width: 860px) { .compare { grid-template-columns: 1fr 1fr; } }
@@ -692,6 +693,26 @@ Break the cycle with @JsonIgnore() on the back-reference, or supply a
       reports success while emitting a bundle that throws on first import. cereale ships the plugin
       that fixes it.
     </div>
+
+    <div class="table-scroll" style="margin-top:1.5rem">
+      <table>
+        <caption class="sr-only">Framework support</caption>
+        <thead><tr><th scope="col">Framework</th><th scope="col">Works</th><th scope="col">What it takes</th></tr></thead>
+        <tbody>
+          <tr><td>Angular&nbsp;21</td><td><span class="tick">✓</span></td><td class="note">Flip the scaffolded <code>experimentalDecorators</code> to <code>false</code> — Angular does not need it</td></tr>
+          <tr><td>React, Vue, Svelte&hellip;</td><td><span class="tick">✓</span></td><td class="note">Any Vite&nbsp;8 app — add the plugin below</td></tr>
+          <tr><td>Bun</td><td><span class="tick">✓</span></td><td class="note">Nothing</td></tr>
+          <tr><td>Node + <code>tsc</code></td><td><span class="tick">✓</span></td><td class="note">Just the flag</td></tr>
+          <tr><td>Next.js&nbsp;16</td><td><span class="warn-mark">~</span></td><td class="note">Not inline — keep models in a package compiled by <code>tsc</code></td></tr>
+          <tr><td>NestJS&nbsp;11</td><td><span class="warn-mark">~</span></td><td class="note">Not inline — its DI needs <code>emitDecoratorMetadata</code>; same precompiled route</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="pg-note" style="max-width:var(--measure)">
+      Each of these was set up and run before it was written down.
+      <a href="https://github.com/avalon-vanguard/cereale/blob/main/FRAMEWORKS.md">FRAMEWORKS.md</a>
+      has the full recipe for every one, including the two that need the precompiled route.
+    </p>
 
     <div class="code" style="margin-top:1.25rem;max-width:640px">
       <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">vite.config.ts</span></div>
