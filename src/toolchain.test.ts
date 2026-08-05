@@ -105,6 +105,26 @@ describe('compilers that emit standard decorators', () => {
     const { Probe } = await load(await emit.swc(PROBE, STANDARD));
     expect(Object.keys(modelOf(Probe))).toEqual(['name']);
   });
+
+  // esbuild lowers standard decorators only when its own top-level `target` is below `esnext`.
+  // A `target` inside `tsconfigRaw` sets the `useDefineForClassFields` default and nothing else,
+  // so the natural-looking "put the tsconfig settings in tsconfigRaw" configuration leaves the
+  // decorator syntax in the output — the same silent passthrough oxc produces. Documented here
+  // because the README and the landing page both tell people how to configure esbuild.
+  it('needs esbuild’s own target, not one inside tsconfigRaw', async () => {
+    const withoutTarget = await transform(PROBE, {
+      loader: 'ts',
+      tsconfigRaw: { compilerOptions: { experimentalDecorators: false, target: 'es2022' } },
+    });
+    expect(withoutTarget.code, 'expected the decorator to survive untransformed').toMatch(/@Rule\(\)/);
+
+    const withTarget = await transform(PROBE, {
+      loader: 'ts',
+      target: 'es2022',
+      tsconfigRaw: { compilerOptions: { experimentalDecorators: false, useDefineForClassFields: true } },
+    });
+    expect(withTarget.code).not.toMatch(/@Rule\(\)/);
+  });
 });
 
 describe('compilers configured for legacy decorators', () => {

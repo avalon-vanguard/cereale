@@ -95,13 +95,15 @@ than a `TypeError` from somewhere inside the engine.
 
 ### Toolchain support
 
-Whether Cereale works at all depends on your compiler emitting standard decorators, so this
-table is [checked by a test](src/toolchain.test.ts) rather than asserted here:
+Whether Cereale works at all depends on your compiler emitting standard decorators, so the three
+✅ rows are [checked by a test](src/toolchain.test.ts) rather than asserted here — each compiles a
+decorated class with that tool and asserts the metadata arrived. The ❌ row cannot be: oxc ships
+inside a native binary with no standalone transform API.
 
 | Transformer | Status | Notes |
 | --- | --- | --- |
 | `tsc` | ✅ | With `experimentalDecorators: false` and `target: ES2022`+ |
-| esbuild | ✅ | Same settings via `tsconfigRaw` |
+| esbuild | ✅ | `experimentalDecorators: false` via `tsconfigRaw`, **plus** esbuild's own top-level `target: es2022`. Its default `esnext` target leaves decorator syntax in the output |
 | swc | ✅ | `jsc.transform.decoratorVersion: "2022-03"` |
 | **oxc** | ❌ | Used by **Vite 8** and **Vitest 4** — see below |
 

@@ -97,8 +97,22 @@ at runtime so it cannot drift.
 
 The hero's compiler error is not typed into the HTML — `scripts/build-docs.mjs` compiles the
 snippet with the real `tsc` and writes the verbatim diagnostic into `docs/diagnostics.js`,
-failing the build if a snippet the page calls a compile error ever compiles. A third snippet
-that must compile guards against the harness passing vacuously.
+failing the build if a snippet the page calls a compile error ever compiles. Two more snippets
+that must compile guard against the harness passing vacuously.
+
+### Corrected
+
+The README's toolchain table said esbuild takes "the same settings via `tsconfigRaw`". It does
+not: esbuild lowers standard decorators only when its **own top-level `target`** is below
+`esnext`. A `target` inside `tsconfigRaw` sets the `useDefineForClassFields` default and
+nothing else, so following that advice leaves decorator syntax in the output — the same silent
+passthrough the section blames on oxc. Both the table and the landing page now say so, and
+`src/toolchain.test.ts` asserts both halves, so the trap is documented by a test rather than by
+a sentence.
+
+Also corrected in the same pass: the toolchain table is described as executed by a test, but
+the oxc row — the only ✗ — cannot be, because oxc ships inside a native binary with no
+standalone transform API. The claim now covers the three rows it actually covers.
 
 ### Positioning
 

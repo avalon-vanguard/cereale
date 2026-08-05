@@ -650,8 +650,11 @@ Break the cycle with @JsonIgnore() on the back-reference, or supply a
       <h2>The toolchain cost, stated plainly</h2>
       <p class="lede">
         cereale reads the metadata that only a <strong>standard</strong> decorator transform emits, so
-        which compiler you use decides whether it works at all. This table is executed by a test on
-        every CI run, not asserted here.
+        which compiler you use decides whether it works at all. The three ✓ rows are executed by a
+        test on every CI run rather than asserted here — each one compiles a decorated class with
+        that tool and checks the metadata arrived. The ✗ row cannot be: oxc ships inside a native
+        binary with no standalone transform API, so it was established by hand, and the plugin below
+        is what came of it.
       </p>
     </div>
 
@@ -663,7 +666,7 @@ Break the cycle with @JsonIgnore() on the back-reference, or supply a
         </thead>
         <tbody>
           <tr><td><code>tsc</code></td><td><span class="tick">✓</span></td><td class="note"><code>experimentalDecorators: false</code>, <code>target: ES2022</code>+</td></tr>
-          <tr><td>esbuild</td><td><span class="tick">✓</span></td><td class="note">the same settings via <code>tsconfigRaw</code></td></tr>
+          <tr><td>esbuild</td><td><span class="tick">✓</span></td><td class="note"><code>experimentalDecorators: false</code> via <code>tsconfigRaw</code>, <em>plus</em> esbuild's own top-level <code>target: es2022</code> — its default <code>esnext</code> leaves the decorators in place</td></tr>
           <tr><td>swc</td><td><span class="tick">✓</span></td><td class="note"><code>jsc.transform.decoratorVersion: "2022-03"</code></td></tr>
           <tr><td>oxc</td><td><span class="cross">✗</span></td><td class="note">used by <strong>Vite&nbsp;8</strong> and <strong>Vitest&nbsp;4</strong> — see below</td></tr>
         </tbody>
@@ -680,16 +683,21 @@ Break the cycle with @JsonIgnore() on the back-reference, or supply a
 
     <div class="code" style="margin-top:1.25rem;max-width:640px">
       <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">vite.config.ts</span></div>
-      <pre><code data-lang="ts">import { standardDecorators } from 'cereale/vite';
+      <pre><code data-lang="ts">import { defineConfig } from 'vite';
+import { standardDecorators } from 'cereale/vite';
 
 export default defineConfig({
   plugins: [standardDecorators()],
 });</code></pre>
     </div>
     <p class="pg-note" style="max-width:var(--measure)">
-      It transforms with esbuild, falling back to the TypeScript compiler — cereale depends on
-      neither. Nothing in it is specific to cereale; it can be deleted once oxc implements the
-      transform.
+      It transforms <code class="inline-code">.ts</code>, <code class="inline-code">.mts</code> and
+      <code class="inline-code">.cts</code> outside <code class="inline-code">node_modules</code> with
+      esbuild, falling back to the TypeScript compiler — cereale depends on neither. Decorated
+      classes in <code class="inline-code">.tsx</code> need an <code class="inline-code">include</code>
+      of your own; they are excluded by default because lowering them means also deciding what
+      happens to the JSX. Nothing in the plugin is specific to cereale; it can be deleted once oxc
+      implements the transform.
     </p>
   </div>
 </section>

@@ -168,7 +168,7 @@
       ["@StartsWith(text)", 'must start with the prefix'],
       ["@EndsWith(text)", 'must end with the suffix']
     ]],
-    ['Equality and membership', 'Pinning a field to specific values. These narrow the field’s type too.', [
+    ['Equality and membership', 'Pinning a field to specific values. These narrow the field’s type too — except @IsNotIn, which accepts any field, because narrowing a deny-list would be backwards.', [
       ["@Equals(value)", 'must equal the value'],
       ["@NotEquals(value)", 'must not equal the value'],
       ["@IsIn(values)", 'must be one of the listed values'],
@@ -185,15 +185,15 @@
       ["@ArrayContains(values)", 'must contain all the listed values'],
       ["@ArrayNotContains(values)", 'must not contain any of the listed values']
     ]],
-    ['Dates', 'Both take a thunk, so a moving boundary is evaluated per validation.', [
-      ["@MinDate(() => date)", 'must not be earlier than the date'],
-      ["@MaxDate(() => date)", 'must not be later than the date']
+    ['Dates', 'Both take a Date, or a thunk so a moving boundary is evaluated per validation rather than frozen when the class was declared.', [
+      ["@MinDate(date | (() => date))", 'must not be earlier than the date'],
+      ["@MaxDate(date | (() => date))", 'must not be later than the date']
     ]],
     ['Custom rules', 'When the built-ins run out.', [
-      ["@Validate(constraint, options?)", 'applies a custom validator class or function'],
-      ["defineRule(Class, field, rule)", 'registers a rule from outside a decorator']
+      ["@Validate(validator, constraints?, options?)", 'applies a custom validator class or predicate; annotate the predicate\'s parameter to constrain the field type'],
+      ["defineRule(Class, field, rule, options?)", 'registers a rule from outside a decorator']
     ]],
-    ['Reading JSON', 'Every one of these has a …Sync twin that needs no await.', [
+    ['Reading JSON', 'Each of these has a …Sync twin that needs no await, except fromRequest.', [
       ["toInstance(Class, plain, options?)", 'plain object → validated instance'],
       ["fromJson(Class, json, options?)", 'JSON string → validated instance'],
       ["toInstanceArray(Class, plain, options?)", 'array of plain objects → instances'],
@@ -220,7 +220,9 @@
       ["namingStrategy: strategy", 'identity (default), camelCase, PascalCase, snake_case, SCREAMING_SNAKE_CASE, kebab-case, or your own function'],
       ["unknownKeys: policy", 'allow (default), strip, or error'],
       ["maxDepth: number", 'nesting limit before a JsonMappingError — default 64'],
-      ["configure(options)", 'sets the library-wide defaults']
+      ["configure(options)", 'sets the library-wide defaults'],
+      ["getConfig()", 'reads the defaults currently in force'],
+      ["resetConfig()", 'restores the built-in defaults — the one a test suite needs']
     ]],
     ['Build', 'Only needed on toolchains that transform with oxc.', [
       ["standardDecorators(options?)", "the Vite and Vitest plugin, from 'cereale/vite'"]
