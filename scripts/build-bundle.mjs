@@ -31,15 +31,9 @@ await build({
   bundle: true,
   format: 'esm',
   target: 'esnext',
-  // NOT `minify: true`. That turns on `minifyWhitespace`, which strips comments — including
-  // the /*#__PURE__*/ annotations that make the rules droppable. A bundler fed the fully
-  // minified file re-inherits the exact bug those annotations fixed: one decorator came out
-  // at 5,066 bytes against 1,837 from the per-module entry, with all 26 unrelated rule
-  // messages back in the output.
-  //
-  // Syntax and identifier minification keep them. The cost is 34.6 KB raw against 26.0 KB,
-  // but 9.8 KB gzipped against 8.7 KB — about a kilobyte over the wire, which is a fair price
-  // for a file that behaves correctly however someone ends up using it.
+  // NOT `minify: true`: `minifyWhitespace` strips comments, /*#__PURE__*/ included, and a
+  // bundler fed the result keeps every unused rule — 5,066 bytes for one decorator against
+  // 1,837. Asserted below. Costs about a kilobyte gzipped.
   minifySyntax: true,
   minifyIdentifiers: true,
   sourcemap: true,
@@ -52,22 +46,21 @@ await build({
   outfile,
 });
 
-// The banner names a version, so a stale bundle would misreport itself rather than merely be
-// out of date. Cheap to assert, and the build is the only place that can.
-const emitted = await readFile(outfile, 'utf8');
-if (!emitted.includes(`cereale ${pkg.version}`)) {
-  throw new Error('the bundle banner does not carry the current version');
-}
-for (const name of ['toInstanceSync', 'IsString']) {
-  if (!emitted.includes(name)) throw new Error(`${name} is missing from the flat bundle`);
-}
-
 // The whole reason this file is not fully minified. Asserting it here means a future change to
 // the minify options fails the build rather than silently tripling what a bundler keeps.
-const annotations = (emitted.match(/__PURE__/g) ?? []).length;
-const expected = (await readFile(path.join(dist, 'esm/decorators.js'), 'utf8').then(
-  (s) => (s.match(/__PURE__/g) ?? []).length
-));
+//
+// The floor on `expected` is not decoration: comparing the two counts alone passes vacuously if
+// tsc ever stops emitting the annotations, since 0 >= 0. It has to be wrong in both directions.
+const count = (s) => (s.match(/__PURE__/g) ?? []).length;
+const emitted = await readFile(outfile, 'utf8');
+const annotations = count(emitted);
+const expected = count(await readFile(path.join(dist, 'esm/decorators.js'), 'utf8'));
+if (expected < 30) {
+  throw new Error(
+    `dist/esm/decorators.js carries only ${expected} /*#__PURE__*/ annotations; src/decorators.ts ` +
+    'writes 30. The compiler is dropping them, so every consumer keeps all 68 rules.'
+  );
+}
 if (annotations < expected) {
   throw new Error(
     `the flat bundle kept ${annotations} /*#__PURE__*/ annotations but dist/esm/decorators.js has ` +

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { build } from 'esbuild';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -33,13 +33,13 @@ const MARKER = {
   naming: 'SCREAMING_SNAKE_CASE',
 } as const;
 
-const ENTRY = path.resolve('src/index.js').replace(/\.js$/, '.js');
+const ENTRY = JSON.stringify(path.resolve('src/index.js'));
 
 async function bundle(source: string): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), 'cereale-shake-'));
   try {
     const entry = path.join(dir, 'entry.ts');
-    await writeFile(entry, source.replace('CEREALE', JSON.stringify(ENTRY)));
+    await writeFile(entry, source);
     const result = await build({
       entryPoints: [entry],
       bundle: true,
@@ -75,7 +75,7 @@ function expectShaken(code: string, keeps: string[], drops: string[]) {
 describe('tree-shaking', () => {
   it('drops the 67 rules you did not import', async () => {
     const code = await bundle(`
-      import { IsString } from CEREALE;
+      import { IsString } from ${ENTRY};
       export const d = IsString();
     `);
 
@@ -90,7 +90,7 @@ describe('tree-shaking', () => {
 
   it('keeps the deserializer and drops the serializer when only reading', async () => {
     const code = await bundle(`
-      import { toInstanceSync } from CEREALE;
+      import { toInstanceSync } from ${ENTRY};
       export const f = (C, p) => toInstanceSync(C, p, { validate: false });
     `);
 
@@ -101,7 +101,7 @@ describe('tree-shaking', () => {
 
   it('keeps the serializer and drops the deserializer when only writing', async () => {
     const code = await bundle(`
-      import { toPlainSync } from CEREALE;
+      import { toPlainSync } from ${ENTRY};
       export const f = (o) => toPlainSync(o, { validate: false });
     `);
 
@@ -110,7 +110,7 @@ describe('tree-shaking', () => {
 
   it('drops both engines when only validating', async () => {
     const code = await bundle(`
-      import { validateSync } from CEREALE;
+      import { validateSync } from ${ENTRY};
       export const f = (o) => validateSync(o);
     `);
 
@@ -130,7 +130,7 @@ describe('tree-shaking', () => {
    */
   it('installs Symbol.metadata even when nothing model-shaped is imported', async () => {
     const code = await bundle(`
-      import { configure } from CEREALE;
+      import { configure } from ${ENTRY};
       export const f = (o) => configure(o);
     `);
 
@@ -140,7 +140,7 @@ describe('tree-shaking', () => {
 
   it('costs almost nothing to import only an error helper', async () => {
     const code = await bundle(`
-      import { flattenErrors } from CEREALE;
+      import { flattenErrors } from ${ENTRY};
       export const f = (e) => flattenErrors(e);
     `);
 
@@ -150,7 +150,7 @@ describe('tree-shaking', () => {
 
   it('still contains everything when everything is used', async () => {
     const code = await bundle(`
-      import * as cereale from CEREALE;
+      import * as cereale from ${ENTRY};
       export default cereale;
     `);
 
@@ -175,7 +175,7 @@ describe('tree-shaking', () => {
       const code = await bundle(`
         import { IsString } from ${JSON.stringify(path.join(dist, 'cereale.min.js'))};
         export const d = IsString();
-      `.replace('CEREALE', 'unused'));
+      `);
 
       expectShaken(code, [MARKER.isString], [MARKER.isLatitude, MARKER.isSemVer, MARKER.serializer]);
       expect(code.length).toBeLessThan(3000);
@@ -191,20 +191,11 @@ describe('tree-shaking', () => {
       const code = await bundle(`
         import { configure } from ${JSON.stringify(path.join(dist, 'esm/index.js'))};
         export const f = (o) => configure(o);
-      `.replace('CEREALE', 'unused'));
+      `);
 
       expect(code, 'the Symbol.metadata install was pruned from dist/esm').toContain('Symbol.metadata');
       expectShaken(code, [], [MARKER.isString, MARKER.serializer, MARKER.deserializer]);
     });
 
-    it.runIf(built)('keeps its purity annotations through minification', async () => {
-      const flat = readFileSync(path.join(dist, 'cereale.min.js'), 'utf8');
-      const perModule = readFileSync(path.join(dist, 'esm/decorators.js'), 'utf8');
-      const count = (s: string) => (s.match(/__PURE__/g) ?? []).length;
-
-      expect(count(perModule), 'src annotations should reach dist/esm').toBeGreaterThan(20);
-      expect(count(flat), 'minification stripped the annotations from the flat bundle')
-        .toBeGreaterThanOrEqual(count(perModule));
-    });
   });
 });

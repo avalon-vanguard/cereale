@@ -38,7 +38,7 @@
     "!src/example.ts"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json && node scripts/build-bundle.mjs",
+    "build": "rm -rf dist && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node scripts/build-bundle.mjs",
     "build:docs": "node scripts/build-docs.mjs",
     "demo": "node --no-warnings=ExperimentalWarning --loader ts-node/esm src/example.ts",
     "type-check": "tsc --noEmit",

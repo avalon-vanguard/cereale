@@ -45,10 +45,10 @@ Measured, minified, across esbuild / rollup / webpack:
 | --- | ---: | ---: | ---: |
 | `flattenErrors` | 394 | 367 | 394 |
 | one decorator | 1,837 | 1,823 | 1,818 |
-| `validateSync` | 3,722 | 3,554 | 3,823 |
-| `toPlainSync` | 7,744 | 7,769 | 7,832 |
-| `toInstanceSync` | 7,900 | 7,942 | 7,956 |
-| a typical DTO | 10,395 | 10,402 | 10,372 |
+| `validateSync` | 3,722 | 3,554 | 3,738 |
+| `toPlainSync` | 7,744 | 7,769 | 7,771 |
+| `toInstanceSync` | 7,900 | 7,942 | 7,944 |
+| a typical DTO | 10,395 | 10,402 | 10,360 |
 | everything | 26,266 | 25,671 | 26,879 |
 
 The serializer and deserializer drop independently. The validator is kept by both mapping
