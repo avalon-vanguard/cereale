@@ -5,6 +5,119 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-05
+
+### `cereale/min` — one file, no bundler
+
+The whole library flattened into a single minified ES module: **33.9 KB, 9.6 KB gzipped**, for
+import maps, `<script type="module">`, Deno and Workers. It is built from `dist/esm/index.js`,
+so the decorator lowering and the ES2025 target are whatever `tsc` produced — esbuild only
+flattens and minifies.
+
+It is an addition, not a replacement. The per-module build stays the default `import`: it keeps
+readable stack traces for anyone not loading source maps, and it is what a bundler should be
+given.
+
+The flat file is minified for syntax and identifiers but **not** whitespace. Full minification
+strips comments — including the `/*#__PURE__*/` annotations below — which silently made
+`cereale/min` un-tree-shakable: one decorator came out at 5,066 bytes against 1,837 from the
+per-module entry, with all 26 unrelated rule messages back in the output. Keeping the
+annotations costs about a kilobyte gzipped and is asserted by the build.
+
+### Tree-shaking
+
+Importing one decorator pulled in the message and validator of all 68. **4,909 bytes instead of
+1,837** through esbuild, 4,823 instead of 1,818 through webpack. Nothing failed and nothing
+warned; the library was simply about three times heavier than it needed to be in every
+consumer's bundle.
+
+The cause is that every rule is a top-level call — `export const IsString = rule(…)`. rollup
+proves such a call side-effect-free by reading the factory, which is why rollup was already
+producing 1,823 bytes and hid the problem from a single-bundler measurement. esbuild and
+webpack will not do that analysis, and keep the call. Thirty declarations now carry
+`/*#__PURE__*/`. On the single-decorator import that exposed the problem the three bundlers now
+land within 19 bytes of each other; on larger imports they still differ by up to a few hundred,
+which is ordinary bundler variation rather than anything left unshaken.
+
+Measured, minified, across esbuild / rollup / webpack:
+
+| What you import | esbuild | rollup | webpack |
+| --- | ---: | ---: | ---: |
+| `flattenErrors` | 394 | 367 | 394 |
+| one decorator | 1,837 | 1,823 | 1,818 |
+| `validateSync` | 3,722 | 3,554 | 3,738 |
+| `toPlainSync` | 7,744 | 7,769 | 7,771 |
+| `toInstanceSync` | 7,900 | 7,942 | 7,944 |
+| a typical DTO | 10,395 | 10,402 | 10,360 |
+| everything | 26,266 | 25,671 | 26,879 |
+
+The serializer and deserializer drop independently. The validator is kept by both mapping
+entry points because `validate` defaults to `true`, which is a real reference rather than a
+missed optimisation.
+
+`src/treeshake.test.ts` pins it. The assertions are mostly about content rather than bytes — it
+names the rules that must not appear — and one case asserts that everything IS present when
+everything is used, so a "shaken" result cannot come from a bundle that failed to build. Strip
+the annotations and it fails with `"must be a latitude" should have been shaken out`.
+
+The same pass shook out something that was supposed to stay. Cereale installs `Symbol.metadata`
+when the runtime lacks it, and `sideEffects` named the module holding that install — but not the
+barrel that re-exports it. A side-effect-free barrel is droppable as a whole, so all three
+bundlers pruned the `export * from './metadata.js'` edge before metadata.js's own marking was
+ever consulted: `import { configure } from 'cereale'` came out at 145 bytes through esbuild, 143
+through webpack and 144 through rollup, with `Symbol.metadata` in none of them. That matters
+because `tsc`'s decorator emit reads the well-known symbol directly — `typeof Symbol ===
+"function" && Symbol.metadata ? Object.create(null) : void 0` — so without the install a
+decorated class gets `metadata: undefined`, which is to say no rules at all.
+
+`index.js` and `index.ts` are now listed too. It costs about 100 bytes, and only on imports that
+reach nothing else; every row of the table above except the first was byte-identical before and
+after, across all three bundlers. Two more cases in `treeshake.test.ts` pin it, one on the source
+and one on `dist/esm`, because those are separate paths in the manifest and a typo in either is
+invisible from the other side.
+
+### Frameworks
+
+[FRAMEWORKS.md](FRAMEWORKS.md) — a setup recipe for each, every one run before it was written,
+with the versions and date it was verified against.
+
+The finding worth stating first: **Angular works**. The CLI scaffolds
+`"experimentalDecorators": true`, but Angular does not need it — `ngtsc` erases `@Component`
+and `@Injectable` into static properties rather than relying on TypeScript's decorator emit.
+Flip the flag and both systems work in one program. Verified with `ngc` on Angular 21.2 with
+`strictTemplates`: templates still type-check, and a wrong cereale rule is still a compile
+error inside the Angular build.
+
+**Next.js cannot work inline**, and the reason is structural rather than a missing option. It
+derives *both* the SWC parser's decorator support and the transform mode from the single
+`experimentalDecorators` flag, so the flag on gives legacy emit that cereale refuses, and the
+flag off makes `@` a syntax error. There is no third setting.
+
+**NestJS cannot work inline** either: its dependency injection genuinely needs the
+`design:type` metadata only `emitDecoratorMetadata` produces.
+
+Both have the same answer, and it is better than it sounds: put the cereale classes in a
+package compiled by `tsc` and import the built output. The decorators run at class-definition
+time inside that package, so the app only ever sees plain JavaScript and its own decorator
+setting stops mattering. Verified inside a program with **both** legacy flags on, running
+alongside `@Injectable()` — mapping and validation work normally, and the compile-time
+guarantee still holds where the rules are written.
+
+Also verified: **Bun** 1.3 needs no configuration at all, and a real Vite 8 build with the
+`cereale/vite` plugin produces working output where the same build without it silently leaves
+decorator syntax in the bundle.
+
+### Packaging
+
+`FRAMEWORKS.md` ships with the package. `sideEffects` now lists the flat bundle, which inlines
+the `Symbol.metadata` install.
+
+### Why 0.4.0 and not 0.3.1
+
+`cereale/min` is a new public entry point, which is a minor bump under 0.x. It also keeps the
+existing `v0.3.0` tag meaningful instead of force-moving it onto a commit it was never cut
+from.
+
 ## [0.3.0] - 2026-08-05
 
 Every change here comes from the same question: where does cereale currently fail *quietly*?

@@ -1,0 +1,48 @@
+name: Junie Review
+
+# Automated PR review by Junie, JetBrains' coding agent. Advisory only: it posts a
+# summary and inline comments, and is deliberately not a required check — CI is what
+# gates a merge, and a review that can block one on a judgement call is a review that
+# gets rubber-stamped.
+#
+# Requires a JUNIE_API_KEY repository secret (Settings → Secrets and variables →
+# Actions). Without it the action fails at the first step rather than skipping, so
+# add the secret before merging this file.
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    branches: [ main, develop ]
+
+# A PR that gets three pushes in a minute should end up with one review of the final
+# state, not three reviews of intermediate ones. Combined with use_single_comment
+# below, each PR keeps exactly one review comment, rewritten as the diff changes.
+concurrency:
+  group: junie-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Junie
+    runs-on: ubuntu-latest
+
+    # Secrets are not exposed to `pull_request` runs originating from a fork, so a
+    # fork PR would fail on an empty API key rather than review anything. Skip those
+    # explicitly — a skipped job reads as "not applicable", a failed one as "broken".
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+    permissions:
+      contents: read         # read the diff; Junie does not push from this workflow
+      pull-requests: write   # post the review summary and inline comments
+      issues: write          # the PR conversation is an issue timeline to the API
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Review the pull request
+      uses: JetBrains/junie-github-action@v1
+      with:
+        junie_api_key: ${{ secrets.JUNIE_API_KEY }}
+        # Built-in structured review prompt, as opposed to a free-form instruction.
+        prompt: "code-review"
+        # Update one comment across re-runs instead of appending a new one per push.
+        use_single_comment: "true"

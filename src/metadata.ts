@@ -15,8 +15,13 @@ import type { ClassConstructor } from './interfaces.js';
  */
 const METADATA_KEY: symbol = (Symbol as { metadata?: symbol }).metadata ?? Symbol.for('Symbol.metadata');
 
-// Also installed globally, because a consumer's own compiler emit may read `Symbol.metadata`
-// directly. package.json marks this module as having side effects so it survives bundling.
+// Also installed globally: tsc's decorator emit reads `Symbol.metadata` directly rather than
+// falling back the way we do — `typeof Symbol === "function" && Symbol.metadata ? … : void 0` —
+// so without this a decorated class gets `metadata: undefined` and no rules at all.
+//
+// `sideEffects` in package.json keeps the statement through bundling, and must name `index.*`
+// as well as this module: marking only this one leaves the barrel droppable, so the edge to it
+// is pruned before this marking is ever read. Pinned by treeshake.test.ts.
 ((Symbol as { metadata?: symbol }).metadata as symbol | undefined) ??= METADATA_KEY;
 
 export interface ValidationArguments {

@@ -42,7 +42,7 @@ export class JsonMappingError extends Error {
  * next steps in a pollution chain. This library exists to parse request bodies, so the
  * transform layer drops them rather than trusting callers to sanitise first.
  */
-const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const FORBIDDEN_KEYS = /*#__PURE__*/ new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
  * Stands in for the value of a property that is never serialized, so that a failing password
@@ -96,7 +96,7 @@ interface OutboundProperty {
   serializer?: any;
 }
 
-const outboundCache = new WeakMap<ClassModel, { version: number; byStrategy: Map<unknown, Map<string, OutboundProperty>> }>();
+const outboundCache = /*#__PURE__*/ new WeakMap<ClassModel, { version: number; byStrategy: Map<unknown, Map<string, OutboundProperty>> }>();
 
 /**
  * Resolves how one property is written out, memoized per (prototype, naming strategy).
@@ -167,7 +167,7 @@ interface InboundNames {
 
 // Name maps are derived purely from decorator metadata, which is fixed once a class is
 // declared, so they are cached per (prototype, naming strategy).
-const inboundCache = new WeakMap<ClassModel, { version: number; byStrategy: Map<unknown, InboundNames> }>();
+const inboundCache = /*#__PURE__*/ new WeakMap<ClassModel, { version: number; byStrategy: Map<unknown, InboundNames> }>();
 
 /**
  * Builds the JSON-name -> property-key lookup used when reading a payload.
@@ -614,7 +614,7 @@ interface CachedPlan {
 // Turning a class model into a per-property plan is cheap, but doing it on every call was
 // measurably not: profiling showed roughly half of all validation time re-deriving answers
 // that cannot change. Plans are memoized per model and invalidated by the model version.
-const planCache = new WeakMap<ClassModel, CachedPlan>();
+const planCache = /*#__PURE__*/ new WeakMap<ClassModel, CachedPlan>();
 
 /**
  * Collapses rules that are genuinely identical.
@@ -663,7 +663,7 @@ function validationPlan(model: ClassModel): PropertyPlan[] {
 
 // Serializers and deserializers are stateless by contract, so one instance per class is
 // enough. Constructing a fresh one for every property of every object was pure waste.
-const converterCache = new WeakMap<object, any>();
+const converterCache = /*#__PURE__*/ new WeakMap<object, any>();
 
 function converterFor(clazz: any): any {
   let instance = converterCache.get(clazz);

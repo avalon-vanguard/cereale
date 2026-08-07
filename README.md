@@ -27,8 +27,9 @@ user.greet();                            // your methods are still there
 
 **[avalon-vanguard.github.io/cereale](https://avalon-vanguard.github.io/cereale/)** — an
 interactive playground that runs this library in your browser, the full decorator reference,
-and the toolchain matrix. The page is self-contained and loads nothing from the network; it is
-served from `docs/` on `main`, and `npm run build:docs` rebuilds its assets to open locally.
+and the toolchain matrix. The page has no third-party dependencies — no CDN, no analytics, no webfonts; the only thing it
+fetches is its own vendored compiler, and only when you first press Run. It is served from
+`docs/` on `main`, and `npm run build:docs` rebuilds its assets to open locally.
 
 ## Where it fits
 
@@ -107,6 +108,20 @@ inside a native binary with no standalone transform API.
 | esbuild | ✅ | `experimentalDecorators: false` via `tsconfigRaw`, **plus** esbuild's own top-level `target: es2022`. Its default `esnext` target leaves decorator syntax in the output |
 | swc | ✅ | `jsc.transform.decoratorVersion: "2022-03"` |
 | **oxc** | ❌ | Used by **Vite 8** and **Vitest 4** — see below |
+
+### Frameworks
+
+**[FRAMEWORKS.md](FRAMEWORKS.md)** has a setup recipe for each, every one of them run before it
+was written. The short version:
+
+| | | |
+| --- | --- | --- |
+| **Angular** 21 | ✅ | Flip the scaffolded `experimentalDecorators` to `false`. Angular does not need it — `ngtsc` erases its own decorators itself |
+| **React, Vue, Svelte, Solid, Astro, Nuxt** | ✅ | Any Vite 8 app: add the `cereale/vite` plugin below |
+| **Bun** | ✅ | No configuration |
+| **Node** + `tsc` | ✅ | Just the flag |
+| **Next.js** 16 | ⚠️ | Not inline: it derives both the SWC parser *and* the transform from one flag, so decorators either compile legacy or fail to parse. Keep your models in a package compiled by `tsc` |
+| **NestJS** 11 | ⚠️ | Not inline: its DI needs `emitDecoratorMetadata`. Same precompiled-package route — verified working alongside `@Injectable()` in a program with both legacy flags on |
 
 **If you are on Vite 8 or Vitest 4**, oxc leaves decorator syntax in the output without
 reporting anything: `vitest` prints `0 test` next to a bare `SyntaxError`, and `vite build`
@@ -479,6 +494,50 @@ Serialization also checks every value it walks against the set JSON cannot repre
 costs a few percent on `toPlain`, which is the price of never emitting `{}` where a `Map`
 used to be; primitives are handled inline and the check is skipped for arrays and dates, so
 it is one `Symbol.toStringTag` read per object.
+
+## Bundle size
+
+Cereale tree-shakes. Every rule is declared so that a bundler can drop the ones you did not
+import, which matters for a library with 68 decorators — you pay for what you name and nothing
+else. Minified bytes, measured through esbuild, rollup and webpack. The table was measured by hand;
+what is [pinned by a test](src/treeshake.test.ts) is the property behind it — that a given
+import drops the parts of the library it does not reach — checked through esbuild on both the
+source and the published bundle:
+
+| What you import | esbuild | rollup | webpack |
+| --- | ---: | ---: | ---: |
+| `flattenErrors` | 394 | 367 | 394 |
+| one decorator | 1,837 | 1,823 | 1,818 |
+| `validateSync` | 3,722 | 3,554 | 3,738 |
+| `toPlainSync` | 7,744 | 7,769 | 7,771 |
+| `toInstanceSync` | 7,900 | 7,942 | 7,944 |
+| a typical DTO — 5 decorators, map, validate, format errors | 10,395 | 10,402 | 10,360 |
+| the whole library | 26,266 | 25,671 | 26,879 |
+
+The serializer and the deserializer drop independently: read JSON and you do not pay for
+writing it. The validator is kept by both, because `validate` defaults to `true` and the entry
+points reference it whatever a given call site passes.
+
+The floor is about a hundred bytes: cereale installs `Symbol.metadata` if the runtime lacks it,
+and that install has to survive tree-shaking or a `tsc`-compiled consumer decorates its classes
+with no metadata at all. It is why `sideEffects` names `index.js` as well as `metadata.js` —
+marking only the latter leaves the barrel itself droppable, so the edge to it is pruned before
+its own marking is ever read. That cost lands only on the first row; every import that touches a
+model was already carrying it.
+
+This did not come for free. Thirty of the rules are declared as top-level calls —
+`export const IsString = rule(…)` — and rollup can prove such a call side-effect-free by reading
+the factory, but esbuild and webpack will not. Without a `/*#__PURE__*/` annotation on each of
+them, importing one decorator pulled in the message and validator of all 68: **4,909 bytes
+instead of 1,837**. Nothing failed; the library was simply three times heavier in every
+consumer's bundle, and the only way to find out was to measure. Note what that means for
+measuring: rollup alone would have shown nothing wrong.
+
+`cereale/min` tree-shakes too, which took a second fix — esbuild's `minify` strips comments,
+annotations included, so the flat bundle was silently reproducing the same bug (5,066 bytes for
+one decorator). It is now minified for syntax and identifiers but not whitespace: 33.9 KB raw,
+9.6 KB gzipped, about a kilobyte over the wire more than full minification would give. Still,
+if you are using a bundler, import from `cereale` rather than `cereale/min`.
 
 ## Notes and Limitations
 

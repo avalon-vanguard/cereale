@@ -1,6 +1,6 @@
 {
   "name": "cereale",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Strongly typed JSON mapping and validation for TypeScript classes \u2014 validated domain objects, not validated data. A zero-dependency replacement for class-validator + class-transformer, on TC39 standard decorators.",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -16,21 +16,29 @@
       "types": "./dist/esm/vite.d.ts",
       "import": "./dist/esm/vite.js",
       "require": "./dist/cjs/vite.js"
+    },
+    "./min": {
+      "types": "./dist/esm/index.d.ts",
+      "default": "./dist/cereale.min.js"
     }
   },
   "sideEffects": [
+    "./dist/esm/index.js",
     "./dist/esm/metadata.js",
-    "./dist/cjs/metadata.js"
+    "./dist/cereale.min.js",
+    "./src/index.ts",
+    "./src/metadata.ts"
   ],
   "files": [
     "dist",
     "src",
+    "FRAMEWORKS.md",
     "CHANGELOG.md",
     "!src/**/*.test.ts",
     "!src/example.ts"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json",
+    "build": "rm -rf dist && tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node scripts/build-bundle.mjs",
     "build:docs": "node scripts/build-docs.mjs",
     "demo": "node --no-warnings=ExperimentalWarning --loader ts-node/esm src/example.ts",
     "type-check": "tsc --noEmit",
