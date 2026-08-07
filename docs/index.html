@@ -365,14 +365,15 @@ footer { border-top: 1px solid var(--border); padding-block: 2.5rem; color: var(
 
 <header class="nav">
   <div class="wrap nav-inner">
-    <a class="brand" href="#top"><span class="grain" aria-hidden="true">🌾</span>cereale <span class="badge" id="version-badge">v0.3.0</span></a>
+    <a class="brand" href="#top"><span class="grain" aria-hidden="true">🌾</span>cereale <span class="badge" id="version-badge">v0.4.0</span></a>
     <nav class="nav-links" aria-label="Primary">
       <a class="nav-hide" href="#guarantee">Guarantee</a>
       <a class="nav-hide" href="#playground">Playground</a>
       <a class="nav-hide" href="#errors">Errors</a>
       <a class="nav-hide" href="#install">Install</a>
+      <a class="nav-hide" href="#size">Size</a>
       <a class="nav-hide" href="#reference">Reference</a>
-      <a class="ghost" href="https://github.com/Avalon-Vanguard/cereale">GitHub</a>
+      <a class="ghost" href="https://github.com/avalon-vanguard/cereale">GitHub</a>
       <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch between light and dark theme">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
@@ -399,14 +400,15 @@ footer { border-top: 1px solid var(--border); padding-block: 2.5rem; color: var(
           <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 4l10 6-10 6V4z"/></svg>
           Run it in the browser
         </a>
-        <a class="btn btn-secondary" href="https://github.com/Avalon-Vanguard/cereale">Read the source</a>
+        <a class="btn btn-secondary" href="https://github.com/avalon-vanguard/cereale">Read the source</a>
       </div>
       <div class="fact-row">
         <span class="fact"><b>0</b> runtime dependencies</span>
         <span class="fact"><b id="decorator-count">68</b> decorators</span>
         <span class="fact">TC39 <b>standard decorators</b></span>
-        <span class="fact">ESM + CJS</span>
+        <span class="fact">ESM + CJS + single-file</span>
         <span class="fact">Node <b id="node-req">&ge;20</b></span>
+        <span class="fact"><b>1.8 KB</b> for one decorator</span>
       </div>
     </div>
 
@@ -617,7 +619,7 @@ if (first instanceof Movie) {
       <p class="eyebrow">Diagnosability</p>
       <h2>Nothing fails quietly</h2>
       <p class="lede">
-        The 0.3.0 release exists because of this. A mapping layer that loses your data and reports
+        The 0.3.0 release existed because of this. A mapping layer that loses your data and reports
         success is worse than one that stops, so every silent failure found in the engine was turned
         into an error that names the cause and the way out.
       </p>
@@ -663,7 +665,8 @@ Break the cycle with @JsonIgnore() on the back-reference, or supply a
       <h2>The toolchain cost, stated plainly</h2>
       <p class="lede">
         cereale reads the metadata that only a <strong>standard</strong> decorator transform emits, so
-        which compiler you use decides whether it works at all. The three ✓ rows are executed by a
+        which compiler you use decides whether it works at all. The three ✓ rows in the first table are
+        executed by a
         test on every CI run rather than asserted here — each one compiles a decorated class with
         that tool and checks the metadata arrived. The ✗ row cannot be: oxc ships inside a native
         binary with no standalone transform API, so it was established by hand, and the plugin below
@@ -678,7 +681,7 @@ Break the cycle with @JsonIgnore() on the back-reference, or supply a
           <tr><th scope="col">Transformer</th><th scope="col">Works</th><th scope="col">Setting</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>tsc</code></td><td><span class="tick">✓</span></td><td class="note"><code>experimentalDecorators: false</code>, <code>target: ES2022</code>+</td></tr>
+          <tr><td><code>tsc</code>&nbsp;5.2+</td><td><span class="tick">✓</span></td><td class="note"><code>experimentalDecorators: false</code>, <code>target: ES2022</code>+</td></tr>
           <tr><td>esbuild</td><td><span class="tick">✓</span></td><td class="note"><code>experimentalDecorators: false</code> via <code>tsconfigRaw</code>, <em>plus</em> esbuild's own top-level <code>target: es2022</code> — its default <code>esnext</code> leaves the decorators in place</td></tr>
           <tr><td>swc</td><td><span class="tick">✓</span></td><td class="note"><code>jsc.transform.decoratorVersion: "2022-03"</code></td></tr>
           <tr><td>oxc</td><td><span class="cross">✗</span></td><td class="note">used by <strong>Vite&nbsp;8</strong> and <strong>Vitest&nbsp;4</strong> — see below</td></tr>
@@ -701,15 +704,16 @@ Break the cycle with @JsonIgnore() on the back-reference, or supply a
         <tbody>
           <tr><td>Angular&nbsp;21</td><td><span class="tick">✓</span></td><td class="note">Flip the scaffolded <code>experimentalDecorators</code> to <code>false</code> — Angular does not need it</td></tr>
           <tr><td>React, Vue, Svelte&hellip;</td><td><span class="tick">✓</span></td><td class="note">Any Vite&nbsp;8 app — add the plugin below</td></tr>
-          <tr><td>Bun</td><td><span class="tick">✓</span></td><td class="note">Nothing</td></tr>
+          <tr><td>Bun&nbsp;1.3</td><td><span class="tick">✓</span></td><td class="note">Nothing</td></tr>
           <tr><td>Node + <code>tsc</code></td><td><span class="tick">✓</span></td><td class="note">Just the flag</td></tr>
           <tr><td>Next.js&nbsp;16</td><td><span class="warn-mark">~</span></td><td class="note">Not inline — keep models in a package compiled by <code>tsc</code></td></tr>
-          <tr><td>NestJS&nbsp;11</td><td><span class="warn-mark">~</span></td><td class="note">Not inline — its DI needs <code>emitDecoratorMetadata</code>; same precompiled route</td></tr>
+          <tr><td>NestJS&nbsp;11.1</td><td><span class="warn-mark">~</span></td><td class="note">Not inline — its DI needs <code>emitDecoratorMetadata</code>; same precompiled route</td></tr>
         </tbody>
       </table>
     </div>
     <p class="pg-note" style="max-width:var(--measure)">
-      Each of these was set up and run before it was written down.
+      Each of these was set up and run before it was written down, on 2026-08-05, against the
+      versions listed.
       <a href="https://github.com/avalon-vanguard/cereale/blob/main/FRAMEWORKS.md">FRAMEWORKS.md</a>
       has the full recipe for every one, including the two that need the precompiled route.
     </p>
@@ -740,7 +744,7 @@ export default defineConfig({
   <div class="wrap">
     <div class="section-head">
       <p class="eyebrow">Getting started</p>
-      <h2>Two settings, and one caveat</h2>
+      <h2>Two settings, one caveat, and two ways in</h2>
     </div>
 
     <div class="compare">
@@ -768,19 +772,108 @@ export default defineConfig({
         <p class="compare-label"><span class="pill pill-bad">not on npm yet</span> installing it today</p>
         <div class="code">
           <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">shell</span></div>
-          <pre><code data-lang="text">git clone https://github.com/Avalon-Vanguard/cereale
+          <pre><code data-lang="text">git clone https://github.com/avalon-vanguard/cereale
 cd cereale
 npm install &amp;&amp; npm run build
-npm pack                    # → cereale-0.3.0.tgz
+npm pack                    # → cereale-0.4.0.tgz
 
 # then, from your own project
-npm install ../cereale/cereale-0.3.0.tgz</code></pre>
+npm install ../cereale/cereale-0.4.0.tgz</code></pre>
         </div>
         <p class="pg-note">
           <code class="inline-code">npm install cereale</code> does <strong>not</strong> resolve to
           this library — the name is unclaimed on the registry. Installing straight from GitHub
           will not work either: the build output is not committed, so the package would arrive
           without its <code class="inline-code">dist/</code>.
+        </p>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:1.75rem">
+      <h3>No bundler at all</h3>
+      <p>
+        <code class="inline-code">cereale/min</code> is the whole library flattened into one
+        minified ES module — <strong>33.9&nbsp;KB</strong>, 9.6&nbsp;KB gzipped — for import maps,
+        a bare <code class="inline-code">&lt;script type="module"&gt;</code>, Deno and Workers.
+      </p>
+      <div class="code">
+        <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">index.html</span></div>
+        <pre><code data-lang="text">&lt;script type="importmap"&gt;
+  { "imports": { "cereale": "./node_modules/cereale/dist/cereale.min.js" } }
+&lt;/script&gt;
+&lt;script type="module"&gt;
+  import { IsString, toInstanceSync } from 'cereale';
+&lt;/script&gt;</code></pre>
+      </div>
+      <p class="pg-note">
+        <strong>If you are using a bundler, do not use it.</strong> It is the whole library in one
+        file, so nothing can be dropped from it. The default entry point tree-shakes; this one
+        cannot, because there is nothing left to shake.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================================= size -->
+<section id="size" style="background:var(--bg-sunken);border-block:1px solid var(--border)">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Bundle size</p>
+      <h2>You pay for the decorators you name</h2>
+      <p class="lede">
+        Sixty-eight decorators is a lot to ship to a browser, so none of the ones you did not
+        import are shipped. Minified bytes, measured through all three bundlers.
+      </p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <caption class="sr-only">Minified bytes by import, across three bundlers</caption>
+        <thead>
+          <tr>
+            <th scope="col">What you import</th>
+            <th scope="col">esbuild</th><th scope="col">rollup</th><th scope="col">webpack</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>flattenErrors</code></td><td>394</td><td>367</td><td>394</td></tr>
+          <tr><td>one decorator</td><td>1,837</td><td>1,823</td><td>1,818</td></tr>
+          <tr><td><code>validateSync</code></td><td>3,722</td><td>3,554</td><td>3,738</td></tr>
+          <tr><td><code>toPlainSync</code></td><td>7,744</td><td>7,769</td><td>7,771</td></tr>
+          <tr><td><code>toInstanceSync</code></td><td>7,900</td><td>7,942</td><td>7,944</td></tr>
+          <tr><td>a typical DTO</td><td>10,395</td><td>10,402</td><td>10,360</td></tr>
+          <tr><td>the whole library</td><td>26,266</td><td>25,671</td><td>26,879</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="notes" style="margin-top:1.5rem">
+      <div class="note-item">
+        <h3>Reading and writing drop independently</h3>
+        <p>
+          Import <code class="inline-code">toInstanceSync</code> and you do not pay for the
+          serializer. The validator stays in both, because
+          <code class="inline-code">validate</code> defaults to
+          <code class="inline-code">true</code> — a real reference, not a missed optimisation.
+        </p>
+      </div>
+      <div class="note-item">
+        <h3>It did not come for free</h3>
+        <p>
+          Every rule is a top-level call. rollup proves such a call side-effect-free by reading
+          the factory; esbuild and webpack will not. Without a
+          <code class="inline-code">/*#__PURE__*/</code> on each, one decorator cost
+          <strong>4,909 bytes instead of 1,837</strong>. Nothing failed — the library was just
+          three times heavier in every bundle, and the only way to find out was to measure.
+        </p>
+      </div>
+      <div class="note-item">
+        <h3>rollup alone would have shown nothing</h3>
+        <p>
+          It was already producing 1,823 bytes and hid the problem. That is the argument for
+          measuring through more than one bundler, and it is why
+          <a href="https://github.com/avalon-vanguard/cereale/blob/main/src/treeshake.test.ts">a test</a>
+          now pins the property rather than the prose.
         </p>
       </div>
     </div>
@@ -812,7 +905,7 @@ npm install ../cereale/cereale-0.3.0.tgz</code></pre>
     <div class="ref-groups" id="ref-groups"></div>
     <noscript>
       <p class="ref-empty">The reference is rendered with JavaScript. The full list is in the
-        <a href="https://github.com/Avalon-Vanguard/cereale#api-reference">README</a>.</p>
+        <a href="https://github.com/avalon-vanguard/cereale#api-reference">README</a>.</p>
     </noscript>
   </div>
 </section>
@@ -860,7 +953,7 @@ npm install ../cereale/cereale-0.3.0.tgz</code></pre>
         </div>
         <div class="note-item">
           <h3>It is not on npm yet</h3>
-          <p>0.3.0 lives in the repository. <code class="inline-code">npm install cereale</code> does not
+          <p>0.4.0 lives in the repository. <code class="inline-code">npm install cereale</code> does not
             resolve to this library — build it from source until it is published.</p>
         </div>
       </div>
@@ -874,9 +967,9 @@ npm install ../cereale/cereale-0.3.0.tgz</code></pre>
   <div class="wrap foot-grid">
     <p style="margin:0">cereale — MIT licensed. Built by Avalon Vanguard.</p>
     <p style="margin:0">
-      <a href="https://github.com/Avalon-Vanguard/cereale">Source</a> ·
-      <a href="https://github.com/Avalon-Vanguard/cereale/blob/main/CHANGELOG.md">Changelog</a> ·
-      <a href="https://github.com/Avalon-Vanguard/cereale/issues">Issues</a>
+      <a href="https://github.com/avalon-vanguard/cereale">Source</a> ·
+      <a href="https://github.com/avalon-vanguard/cereale/blob/main/CHANGELOG.md">Changelog</a> ·
+      <a href="https://github.com/avalon-vanguard/cereale/issues">Issues</a>
     </p>
   </div>
 </footer>
