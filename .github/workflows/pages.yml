@@ -1,0 +1,72 @@
+name: Deploy Pages
+
+# Publishes docs/ to GitHub Pages through Actions rather than by serving the branch
+# directly, so the page is rebuilt from src/ and checked before it goes live instead
+# of after.
+#
+# REQUIRES A ONE-TIME SETTING. Settings → Pages → Build and deployment → Source must
+# be "GitHub Actions", not "Deploy from a branch". Until it is, the deploy job fails
+# with "Resource not accessible by integration" — the workflow is correct, the
+# repository is still configured to serve the branch. The switch cannot be made from
+# here: it needs a token with administration:write, which GITHUB_TOKEN is not.
+#
+# It is reversible. Setting Source back to a branch restores the old behaviour and
+# this workflow simply stops being able to deploy.
+
+on:
+  push:
+    branches: [ main ]
+    # docs/ holds both the page and its generated bundle, so a src/ change only
+    # matters here once it has been rebuilt into docs/ — which is what CI enforces.
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deploy in flight: a half-published site is worse than a stale one.
+# Queue instead, so the last push wins without interrupting the one already going out.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: 'npm'
+    - name: Install dependencies
+      run: npm ci
+    - name: Rebuild the page bundle from src/
+      run: npm run build:docs
+    - name: The committed page is in sync with src/
+      run: |
+        git diff --exit-code -- docs/ \
+          || (echo "docs/ is stale — run 'npm run build:docs' and commit the result" && exit 1)
+    - name: The page loads nothing from the network
+      run: npm run check:docs
+    - uses: actions/configure-pages@v5
+    - uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./docs
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v5
