@@ -39,7 +39,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Review the pull request
-      uses: JetBrains/junie-github-action@v1
+      # Pinned to the newest release rather than the moving v1 tag, so the version
+      # running is the version reviewed here. Bump deliberately.
+      uses: JetBrains/junie-github-action@v1.7.4
       with:
         junie_api_key: ${{ secrets.JUNIE_API_KEY }}
         # Built-in structured review prompt, as opposed to a free-form instruction.
