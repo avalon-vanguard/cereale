@@ -331,9 +331,10 @@ await esbuild.build({
 `cereale/min` is the whole library flattened into one minified ES module (33.9 KB, 9.6 KB
 gzipped) for import maps, `<script type="module">`, Deno and Workers.
 
-**If you are using a bundler, do not use it.** It is the whole library in one file, so nothing
-can be dropped from it. The default entry point tree-shakes — one decorator costs about 1.8 KB
-against 26 KB for everything — and produces a smaller result in any real application. See
+**If you are using a bundler, prefer the default entry.** The flat file keeps its
+`/*#__PURE__*/` annotations, so a bundler can still drop the rules you did not import — pinned
+by `src/treeshake.test.ts` — but the per-module build shakes slightly leaner (1,837 bytes
+against 1,996 for one decorator through esbuild) and is the canonical route. See
 [Bundle size](README.md#bundle-size).
 
 ```html

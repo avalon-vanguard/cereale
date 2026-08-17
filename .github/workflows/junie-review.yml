@@ -39,9 +39,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Review the pull request
-      # Pinned to the newest release rather than the moving v1 tag, so the version
-      # running is the version reviewed here. Bump deliberately.
-      uses: JetBrains/junie-github-action@v1.7.4
+      # Pinned to the commit behind release v1.7.4. A tag is a mutable ref the
+      # publisher can repoint; only the SHA guarantees the version running is the
+      # version that was reviewed — this workflow handles a repo secret. Bump by
+      # resolving the new release's commit, not by moving the tag name alone.
+      uses: JetBrains/junie-github-action@c2ae82fc9fbe0eb81942ceb3d9bd3f89a6b17b95 # v1.7.4
       with:
         junie_api_key: ${{ secrets.JUNIE_API_KEY }}
         # Built-in structured review prompt, as opposed to a free-form instruction.

@@ -47,7 +47,5 @@ jobs:
     - name: Landing page loads nothing from the network
       run: npm run check:docs
     - name: Landing page bundle is in sync with src/
-      run: |
-        npm run build:docs
-        git diff --exit-code -- docs/ \
-          || (echo "docs/ is stale — run 'npm run build:docs' and commit the result" && exit 1)
+      # Also fails on NEW untracked files under docs/ — a plain `git diff` does not.
+      run: npm run check:docs-sync
