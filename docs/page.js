@@ -39,6 +39,22 @@
   if (versionEl && meta.version) versionEl.textContent = 'v' + meta.version;
   var nodeEl = document.getElementById('node-req');
   if (nodeEl && meta.node) nodeEl.textContent = meta.node.replace('>=', '≥').replace('.0.0', '');
+  if (meta.version) {
+    Array.prototype.forEach.call(document.querySelectorAll('.js-version'), function (el) {
+      el.textContent = meta.version;
+    });
+    // The install snippet names the tarball npm pack produces; keep it tied to the
+    // same package.json fact the badge uses instead of hand-bumping it each release.
+    var shell = document.getElementById('install-shell');
+    if (shell) {
+      shell.textContent = shell.textContent.replace(/cereale-[\d.]+\.tgz/g, 'cereale-' + meta.version + '.tgz');
+    }
+  }
+  if (decoratorCount) {
+    Array.prototype.forEach.call(document.querySelectorAll('.js-dec-count'), function (el) {
+      el.textContent = String(decoratorCount);
+    });
+  }
 
   /* ------------------------------------------------------- highlighting */
   var TOKENS = [

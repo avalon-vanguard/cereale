@@ -1,0 +1,79 @@
+name: Deploy Pages
+
+# Publishes docs/ to GitHub Pages through Actions rather than by serving the branch
+# directly, so the page is rebuilt from src/ and checked before it goes live instead
+# of after.
+#
+# Triggered by CI completing on main rather than by the push itself, so a deploy
+# implies the full suite passed — type-check, lint, tests, build, entry points, docs.
+# A push that breaks a test turns main red and never reaches Pages; the previous
+# wiring deployed on any docs push, green CI or not. workflow_dispatch stays as the
+# manual escape hatch, and the deploy job refuses any ref that is not main.
+#
+# REQUIRES A ONE-TIME SETTING. Settings → Pages → Build and deployment → Source must
+# be "GitHub Actions", not "Deploy from a branch". Until it is, the first run fails —
+# in the build job at configure-pages if Pages was never enabled, or in the deploy
+# job with "Resource not accessible by integration" if Pages still serves a branch.
+# Either way the workflow is correct; the repository setting is what needs to move.
+# The switch cannot be made from here: it needs administration:write, which
+# GITHUB_TOKEN is not. It is reversible — setting Source back to a branch restores
+# the old behaviour and this workflow simply stops being able to deploy.
+
+on:
+  workflow_run:
+    workflows: [ CI ]
+    types: [ completed ]
+    branches: [ main ]
+  workflow_dispatch:
+
+# Never cancel a deploy in flight: a half-published site is worse than a stale one.
+# Queue instead, so the last push wins without interrupting the one already going out.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and check
+    runs-on: ubuntu-latest
+    # workflow_run fires on failure too — deploying is the one thing that must not.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # This job runs third-party code (npm postinstall scripts, the build toolchain),
+    # so it gets read-only. The Pages/OIDC grants live on the deploy job alone.
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: 'npm'
+    - name: Install dependencies
+      run: npm ci
+    - name: The committed page is in sync with src/
+      # Rebuilds from src/ and fails on any difference, new untracked files included.
+      # Same script CI runs, so the two workflows cannot drift apart.
+      run: npm run check:docs-sync
+    - name: The page loads nothing from the network
+      run: npm run check:docs
+    - uses: actions/configure-pages@v5
+    - uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./docs
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    # workflow_dispatch can be pointed at any branch; production only ever serves main.
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v5

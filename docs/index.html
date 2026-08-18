@@ -7,7 +7,7 @@
 <meta name="description" content="Zero-dependency JSON mapping and validation for TypeScript classes. Maps JSON onto your own classes and checks the validation rules against the fields they are attached to, at compile time.">
 <meta name="color-scheme" content="light dark">
 <link rel="canonical" href="https://avalon-vanguard.github.io/cereale/">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 18'><rect x='4' width='2' height='18' fill='%23a0784a' opacity='.35'/><rect y='2' width='10' height='2' fill='%23a0784a'/><rect y='6' width='10' height='2' fill='%23a0784a'/><rect y='10' width='10' height='2' fill='%23a0784a'/><rect y='14' width='10' height='2' fill='%23a0784a'/></svg>">
 
 <!-- Link previews. No og:image: a preview card with a broken image is worse than one
      without, and there is no artwork to point at yet. -->
@@ -22,35 +22,55 @@
 
 <style>
 /* ---------------------------------------------------------------- tokens */
+/* Chaff: one paper, one ink, one repeated 2px mark. The accent is rye-brown and
+   deliberately NOT wheat-gold — gold is both the cliche and a collision with --warn,
+   which already owns amber. Two amber families would make "our brand" and "needs
+   your attention" the same colour.
+
+   Every token below that differs between themes must be written in THREE places: this
+   block (the light palette), the prefers-color-scheme block, and [data-theme="dark"].
+   The dark media block is guarded with :not([data-theme="light"]), so an explicit light
+   toggle falls straight through to these values — there is no light copy to keep in sync. */
 :root {
-  --bg: #fbfbfd;
-  --bg-raised: #ffffff;
-  --bg-sunken: #f3f3f7;
-  --text: #16161d;
-  --text-muted: #55555f;
-  --text-faint: #6b6b78;
-  --border: #e3e3ea;
-  --border-strong: #cfcfd9;
-  --accent: #4f46e5;
-  --accent-text: #4338ca;
-  --accent-soft: #eef2ff;
+  --bg: #faf7f0;
+  --bg-raised: #fffdf7;
+  --bg-sunken: #f2ede1;
+  --text: #1a1712;
+  --text-muted: #5c5346;
+  --text-faint: #6e6353;
+  --border: #e6dfd1;
+  --border-strong: #cfc5b2;
+  /* Icon-only controls need 3:1 against the page (WCAG 1.4.11); --border-strong is
+     decorative and sits well below it. .icon-btn and .btn-secondary use this instead. */
+  --border-ui: #8e8269;
+  --accent: #8a6238;
+  --accent-text: #7a5530;
+  --accent-soft: #f1e9dc;
   /* Filled-accent surfaces carry their own foreground: the dark theme lightens --accent
      for legibility against the page, which then leaves white text on it below AA. */
-  --accent-solid: #4f46e5;
-  --on-accent: #ffffff;
-  --bad: #d4183d;
-  --bad-soft: #fff1f3;
-  --ok: #08795a;
-  --ok-soft: #eefaf5;
-  --warn: #9a5b00;
-  --warn-soft: #fff7ea;
+  --accent-solid: #6b4a28;
+  --on-accent: #fffdf7;
+  --bad: #a82820;
+  --bad-soft: #faebe7;
+  --ok: #256b3d;
+  --ok-soft: #e8f2e9;
+  --warn: #8a5a05;
+  --warn-soft: #fbf1dc;
 
-  /* Code surfaces stay dark in both themes: one syntax palette, always legible. */
-  --code-bg: #16161f;
-  --code-bg-raised: #1e1e29;
-  --code-border: #2b2b3a;
-  --code-text: #d6deeb;
-  --code-faint: #8a93b8;
+  /* Code surfaces stay dark in both themes: one syntax palette, always legible.
+     Warmed off the blue-grey axis so the slab does not read cold against oat paper. */
+  --code-bg: #14120c;
+  --code-bg-raised: #1c190f;
+  --code-border: #2e2818;
+  --code-text: #e2dccb;
+  --code-faint: #9a9280;
+  /* The accent is unreadable on the dark slab in light mode, so focus rings drawn on a
+     code surface get their own token. Without it #editor:focus measures 2.86:1 — a live
+     1.4.11 failure on the shipped page. This measures 6.96:1. */
+  --accent-on-code: #c9962f;
+  /* The error line is the page's one visual device; these were three loose literals. */
+  --err-line: #ff6a7e;
+  --err-text: #ffb3c0;
   --t-comment: #8a93b8;
   --t-string: #b8e08a;
   --t-keyword: #c792ea;
@@ -58,64 +78,63 @@
   --t-type: #ffcb6b;
   --t-number: #f78c6c;
 
+  /* The whole ornament: a 2px mark every 9px. var() resolves against the winning
+     cascaded value, so --accent changing with the theme retints these automatically —
+     they belong on this block only, never in the three below. */
+  --grain-mark: 2px;
+  --grain-pitch: 9px;
+  --rule-x: repeating-linear-gradient(90deg, var(--accent) 0 var(--grain-mark), transparent var(--grain-mark) var(--grain-pitch));
+  --rule-y: repeating-linear-gradient(180deg, var(--accent) 0 var(--grain-mark), transparent var(--grain-mark) var(--grain-pitch));
+  --rule-code: repeating-linear-gradient(90deg, var(--code-faint) 0 var(--grain-mark), transparent var(--grain-mark) var(--grain-pitch));
+
   --radius: 10px;
   --radius-lg: 16px;
-  --shadow: 0 1px 2px rgba(16, 16, 30, .05), 0 8px 24px -12px rgba(16, 16, 30, .18);
+  --shadow: 0 1px 2px rgba(40, 30, 14, .05), 0 8px 24px -12px rgba(40, 30, 14, .20);
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --measure: 68ch;
+  --measure: 64ch;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0e0e14;
-    --bg-raised: #16161f;
-    --bg-sunken: #12121a;
-    --text: #e8e8f0;
-    --text-muted: #a3a3b4;
-    --text-faint: #9494ab;
-    --border: #262633;
-    --border-strong: #363648;
-    --accent: #8b85ff;
-    --accent-text: #a5a0ff;
-    --accent-soft: #1c1b35;
-    --accent-solid: #8b85ff;
-    --on-accent: #10101a;
-    --bad: #ff8095;
-    --bad-soft: #2a1620;
-    --ok: #5cd0a8;
-    --ok-soft: #10241f;
-    --warn: #e5a54b;
-    --warn-soft: #251d10;
-    --code-bg: #12121a;
-    --code-bg-raised: #191922;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .7);
+  :root:not([data-theme="light"]) {
+    --bg: #12100b;
+    --bg-raised: #1a1710;
+    --bg-sunken: #16130d;
+    --text: #ede7da;
+    --text-muted: #aba292;
+    --text-faint: #9b9280;
+    --border: #29241a;
+    --border-strong: #3b3427;
+    --border-ui: #736a59;
+    --accent: #c4a97c;
+    --accent-text: #d8be94;
+    --accent-soft: #2a2115;
+    --accent-solid: #d8be94;
+    --on-accent: #17120a;
+    --bad: #f2867e;
+    --bad-soft: #2b1512;
+    --ok: #6fc98c;
+    --ok-soft: #12241a;
+    --warn: #e9b45a;
+    --warn-soft: #261d0c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 8px 24px -12px rgba(0, 0, 0, .7);
   }
 }
 
-/* The toggle wins over the media query in both directions. */
+/* An explicit light choice: the guarded media block above no longer matches, so the
+   bare :root palette wins on its own. Only the UA hint needs stating. */
 :root[data-theme="light"] {
-  --bg: #fbfbfd; --bg-raised: #ffffff; --bg-sunken: #f3f3f7;
-  --text: #16161d; --text-muted: #55555f; --text-faint: #6b6b78;
-  --border: #e3e3ea; --border-strong: #cfcfd9;
-  --accent: #4f46e5; --accent-text: #4338ca; --accent-soft: #eef2ff;
-  --accent-solid: #4f46e5; --on-accent: #ffffff;
-  --bad: #d4183d; --bad-soft: #fff1f3; --ok: #08795a; --ok-soft: #eefaf5;
-  --warn: #9a5b00; --warn-soft: #fff7ea;
-  --code-bg: #16161f; --code-bg-raised: #1e1e29;
-  --shadow: 0 1px 2px rgba(16, 16, 30, .05), 0 8px 24px -12px rgba(16, 16, 30, .18);
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --bg: #0e0e14; --bg-raised: #16161f; --bg-sunken: #12121a;
-  --text: #e8e8f0; --text-muted: #a3a3b4; --text-faint: #9494ab;
-  --border: #262633; --border-strong: #363648;
-  --accent: #8b85ff; --accent-text: #a5a0ff; --accent-soft: #1c1b35;
-  --accent-solid: #8b85ff; --on-accent: #10101a;
-  --bad: #ff8095; --bad-soft: #2a1620; --ok: #5cd0a8; --ok-soft: #10241f;
-  --warn: #e5a54b; --warn-soft: #251d10;
-  --code-bg: #12121a; --code-bg-raised: #191922;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .7);
+  --bg: #12100b; --bg-raised: #1a1710; --bg-sunken: #16130d;
+  --text: #ede7da; --text-muted: #aba292; --text-faint: #9b9280;
+  --border: #29241a; --border-strong: #3b3427; --border-ui: #736a59;
+  --accent: #c4a97c; --accent-text: #d8be94; --accent-soft: #2a2115;
+  --accent-solid: #d8be94; --on-accent: #17120a;
+  --bad: #f2867e; --bad-soft: #2b1512; --ok: #6fc98c; --ok-soft: #12241a;
+  --warn: #e9b45a; --warn-soft: #261d0c;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 8px 24px -12px rgba(0, 0, 0, .7);
   color-scheme: dark;
 }
 
@@ -132,17 +151,22 @@ body {
   color: var(--text);
   font-family: var(--sans);
   font-size: 16px;
-  line-height: 1.6;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
-h1, h2, h3, h4 { line-height: 1.2; margin: 0; font-weight: 680; letter-spacing: -.02em; }
-h1 { font-size: clamp(2.1rem, 1.3rem + 3.4vw, 3.5rem); letter-spacing: -.035em; }
-h2 { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.1rem); letter-spacing: -.028em; }
-h3 { font-size: 1.125rem; }
+/* 680 and 640 are fiction on a non-variable system stack — they round to 700. And -.035em
+   is generic-landing-page tracking; it is most of what made this look like every other
+   dev-tool site. */
+h1, h2, h3, h4 { line-height: 1.2; margin: 0; font-weight: 700; letter-spacing: -.012em; }
+h1 { font-size: clamp(2rem, 1.35rem + 2.8vw, 3rem); line-height: 1.14; letter-spacing: -.018em; }
+h2 { font-size: clamp(1.4rem, 1.1rem + 1.3vw, 1.85rem); letter-spacing: -.012em; }
+h3 { font-size: 1.0625rem; letter-spacing: -.008em; }
 p { margin: 0 0 1rem; }
-a { color: var(--accent-text); text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent); text-underline-offset: .18em; }
-a:hover { text-decoration-color: currentColor; }
+/* Links keep body colour and are marked by a rule instead. On a palette this warm,
+   --accent-text and --text-muted sit 1.14:1 apart — colour alone would lose them. */
+a { color: var(--text); text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: .16em; }
+a:hover { color: var(--accent-text); text-decoration-color: currentColor; }
 code, kbd, pre { font-family: var(--mono); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
@@ -153,15 +177,23 @@ code, kbd, pre { font-family: var(--mono); }
 section { padding-block: clamp(3rem, 6vw, 5.5rem); }
 .lede { color: var(--text-muted); font-size: 1.0625rem; max-width: var(--measure); }
 .eyebrow {
-  font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--accent-text); margin: 0 0 .6rem;
+  font-family: var(--mono);
+  font-size: .6875rem; font-weight: 500; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent-text); margin: 0 0 .7rem;
 }
 .section-head { margin-bottom: 2.25rem; }
+/* The ornament, use 1 of 3: a section begins. The hero is the page beginning, not a
+   section, so it deliberately has no .section-head and no mark. */
+.section-head::before {
+  content: ""; display: block; width: 4.5rem; height: 3px;
+  margin-bottom: .95rem; background-image: var(--rule-x);
+}
 .skip {
   position: absolute; left: -9999px; top: 0; z-index: 100;
   background: var(--accent-solid); color: var(--on-accent); padding: .6rem 1rem; border-radius: 0 0 var(--radius) 0;
 }
 .skip:focus { left: 0; }
+.skip:hover { color: var(--on-accent); }
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
@@ -175,8 +207,8 @@ header.nav {
   border-bottom: 1px solid var(--border);
 }
 .nav-inner { display: flex; align-items: center; gap: 1rem; height: 3.75rem; }
-.brand { display: flex; align-items: baseline; gap: .5rem; font-weight: 700; letter-spacing: -.02em; font-size: 1.125rem; color: var(--text); text-decoration: none; }
-.brand .grain { font-size: 1rem; }
+.brand { display: flex; align-items: center; gap: .5rem; font-weight: 700; letter-spacing: -.02em; font-size: 1.125rem; color: var(--text); text-decoration: none; }
+.brand .mark { color: var(--accent); flex: none; }
 .badge {
   font: 600 .6875rem/1 var(--mono); padding: .3rem .45rem; border-radius: 999px;
   background: var(--accent-soft); color: var(--accent-text); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
@@ -187,10 +219,13 @@ header.nav {
 }
 .nav-links a:hover { color: var(--text); background: var(--bg-sunken); }
 .nav-links a.ghost { border: 1px solid var(--border-strong); }
-@media (max-width: 640px) { .nav-hide { display: none; } }
+/* The section links need ~810px before they stop pushing the header past the viewport.
+   At 640px they already did not fit: the page overflowed by 63px through the whole
+   641-767px band, which body{overflow-x:hidden} hid rather than fixed. */
+@media (max-width: 860px) { .nav-hide { display: none; } }
 .icon-btn {
   display: inline-grid; place-items: center; width: 2.125rem; height: 2.125rem;
-  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  border: 1px solid var(--border-ui); border-radius: var(--radius);
   background: var(--bg-raised); color: var(--text-muted); cursor: pointer; padding: 0;
 }
 .icon-btn:hover { color: var(--text); }
@@ -208,15 +243,18 @@ header.nav {
   padding: .75rem 1.15rem; border-radius: var(--radius); text-decoration: none; cursor: pointer; border: 1px solid transparent;
 }
 .btn-primary { background: var(--accent-solid); color: var(--on-accent); box-shadow: var(--shadow); }
-.btn-primary:hover { filter: brightness(1.08); }
-.btn-secondary { background: var(--bg-raised); color: var(--text); border-color: var(--border-strong); }
-.btn-secondary:hover { border-color: var(--text-faint); }
+/* Re-assert label colours on hover: the base a:hover (0,1,1) outranks these classes
+   (0,1,0), and in dark theme --accent-text equals --accent-solid — a hovered label
+   painted in its own background. */
+.btn-primary:hover { filter: brightness(1.08); color: var(--on-accent); }
+.btn-secondary { background: var(--bg-raised); color: var(--text); border-color: var(--border-ui); }
+.btn-secondary:hover { border-color: var(--text-faint); color: var(--text); }
 .fact-row {
   display: flex; flex-wrap: wrap; gap: .4rem .5rem; margin-top: 1.5rem;
   font-size: .8125rem; color: var(--text-muted);
 }
 .fact { border: 1px solid var(--border); background: var(--bg-raised); border-radius: 999px; padding: .3rem .7rem; }
-.fact b { color: var(--text); font-weight: 640; }
+.fact b { color: var(--text); font-weight: 600; }
 
 /* ---------------------------------------------------------------- code */
 .code {
@@ -228,8 +266,11 @@ header.nav {
   border-bottom: 1px solid var(--code-border); background: var(--code-bg-raised);
   font: 500 .75rem/1 var(--mono); color: var(--code-faint);
 }
-.code-head .dot { width: .5rem; height: .5rem; border-radius: 50%; background: #33334a; }
-.code-head .name { margin-left: .35rem; }
+/* Use 3 of 3, and a deletion: the fake traffic lights are gone. */
+.code-head::before {
+  content: ""; flex: none; width: 1.05rem; height: 2px;
+  background-image: var(--rule-code);
+}
 .code-head .right { margin-left: auto; }
 .code pre {
   margin: 0; padding: 1.1rem 1.15rem; overflow-x: auto;
@@ -246,18 +287,18 @@ header.nav {
 
 /* The page's one visual device: the line the compiler refuses. */
 .ln--error {
-  background: rgba(255, 92, 122, .09);
-  text-decoration: underline wavy #ff5c7a;
+  background: color-mix(in srgb, var(--err-line) 9%, transparent);
+  text-decoration: underline wavy var(--err-line);
   text-decoration-skip-ink: none;
   text-underline-offset: .32em;
 }
 .tsc-error {
   display: flex; gap: .6rem; align-items: flex-start;
   margin: 0; padding: .7rem .9rem; border-top: 1px solid var(--code-border);
-  background: rgba(255, 92, 122, .08); color: #ffb3c0;
+  background: color-mix(in srgb, var(--err-line) 8%, transparent); color: var(--err-text);
   font: 500 .78125rem/1.5 var(--mono);
 }
-.tsc-error .mark { color: #ff5c7a; flex-shrink: 0; }
+.tsc-error .mark { color: var(--err-line); flex-shrink: 0; }
 
 /* --------------------------------------------------------------- panels */
 .panel {
@@ -303,14 +344,17 @@ header.nav {
   padding: 1.1rem 1.15rem; font: .84375rem/1.75 var(--mono); tab-size: 2; white-space: pre;
   overflow: auto;
 }
-#editor:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+#editor:focus { outline: 2px solid var(--accent-on-code); outline-offset: -2px; }
+/* Scrollable code samples are keyboard-focusable in Chromium; the page-level ring is
+   unreadable on the dark slab and its +2px offset would be clipped by .code overflow. */
+.code :focus-visible, #output:focus-visible { outline: 2px solid var(--accent-on-code); outline-offset: -2px; }
 #output {
   flex: 1; min-height: 400px; margin: 0; overflow: auto;
   background: var(--code-bg); color: var(--code-text); border: 1px solid var(--code-border);
   border-top: none; border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   padding: 1.1rem 1.15rem; font: .84375rem/1.75 var(--mono); white-space: pre-wrap; word-break: break-word;
 }
-#output .out-err { color: #ff8095; }
+#output .out-err { color: var(--err-text); }
 #output .out-dim { color: var(--code-faint); }
 .pg-note { font-size: .8125rem; color: var(--text-muted); margin: .9rem 0 0; }
 
@@ -326,7 +370,7 @@ td.note { white-space: normal; color: var(--text-muted); font-size: .875rem; }
 .ref-bar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-bottom: 1.5rem; }
 #ref-filter {
   flex: 1; min-width: 210px; font: .9375rem var(--sans); padding: .6rem .85rem;
-  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  border: 1px solid var(--border-ui); border-radius: var(--radius);
   background: var(--bg-raised); color: var(--text);
 }
 #ref-count { font-size: .875rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
@@ -344,7 +388,8 @@ td.note { white-space: normal; color: var(--text-muted); font-size: .875rem; }
 
 /* --------------------------------------------------------------- prose */
 .notes { display: grid; gap: .9rem; }
-.note-item { border-left: 2px solid var(--border-strong); padding-left: 1rem; }
+/* Use 2 of 3: the same rhythm stood on end. */
+.note-item { padding-left: 1rem; background: var(--rule-y) left top / 2px 100% no-repeat; }
 .note-item h3 { font-size: .9375rem; margin-bottom: .25rem; }
 .note-item p { color: var(--text-muted); font-size: .9375rem; margin: 0; }
 .callout {
@@ -365,14 +410,15 @@ footer { border-top: 1px solid var(--border); padding-block: 2.5rem; color: var(
 
 <header class="nav">
   <div class="wrap nav-inner">
-    <a class="brand" href="#top"><span class="grain" aria-hidden="true">🌾</span>cereale <span class="badge" id="version-badge">v0.3.0</span></a>
+    <a class="brand" href="#top"><svg class="mark" width="10" height="18" viewBox="0 0 10 18" aria-hidden="true" focusable="false"><rect x="4" y="0" width="2" height="18" fill="currentColor" opacity=".3"/><rect x="0" y="2" width="10" height="2" fill="currentColor"/><rect x="0" y="6" width="10" height="2" fill="currentColor"/><rect x="0" y="10" width="10" height="2" fill="currentColor"/><rect x="0" y="14" width="10" height="2" fill="currentColor"/></svg>cereale <span class="badge" id="version-badge">v0.4.0</span></a>
     <nav class="nav-links" aria-label="Primary">
       <a class="nav-hide" href="#guarantee">Guarantee</a>
       <a class="nav-hide" href="#playground">Playground</a>
       <a class="nav-hide" href="#errors">Errors</a>
       <a class="nav-hide" href="#install">Install</a>
+      <a class="nav-hide" href="#size">Size</a>
       <a class="nav-hide" href="#reference">Reference</a>
-      <a class="ghost" href="https://github.com/Avalon-Vanguard/cereale">GitHub</a>
+      <a class="ghost" href="https://github.com/avalon-vanguard/cereale">GitHub</a>
       <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch between light and dark theme">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
@@ -399,21 +445,22 @@ footer { border-top: 1px solid var(--border); padding-block: 2.5rem; color: var(
           <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 4l10 6-10 6V4z"/></svg>
           Run it in the browser
         </a>
-        <a class="btn btn-secondary" href="https://github.com/Avalon-Vanguard/cereale">Read the source</a>
+        <a class="btn btn-secondary" href="https://github.com/avalon-vanguard/cereale">Read the source</a>
       </div>
       <div class="fact-row">
         <span class="fact"><b>0</b> runtime dependencies</span>
         <span class="fact"><b id="decorator-count">68</b> decorators</span>
         <span class="fact">TC39 <b>standard decorators</b></span>
-        <span class="fact">ESM + CJS</span>
+        <span class="fact">ESM + CJS + single-file</span>
         <span class="fact">Node <b id="node-req">&ge;20</b></span>
+        <span class="fact"><b>1.8 KB</b> for one decorator</span>
       </div>
     </div>
 
     <div>
       <div class="code">
         <div class="code-head">
-          <span class="dot" aria-hidden="true"></span><span class="name">order.ts</span>
+          <span class="name">order.ts</span>
         </div>
         <pre><code data-lang="ts" data-error-line="9">class Order {
   @JsonProperty('order_ref')
@@ -464,7 +511,7 @@ order.total();                            // methods intact</code></pre>
       <div>
         <p class="compare-label"><span class="pill pill-bad">compiles, then fails at runtime</span> class-validator</p>
         <div class="code">
-          <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">with legacy decorators</span></div>
+          <div class="code-head"><span class="name">with legacy decorators</span></div>
           <pre><code data-lang="ts">class User {
   @IsString()
   age: number;      // accepted by the compiler
@@ -477,7 +524,7 @@ order.total();                            // methods intact</code></pre>
       <div>
         <p class="compare-label"><span class="pill pill-ok">rejected before it runs</span> cereale</p>
         <div class="code">
-          <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">with standard decorators</span></div>
+          <div class="code-head"><span class="name">with standard decorators</span></div>
           <pre><code data-lang="ts" data-error-line="2">class User {
   @IsString()
   age!: number;     // Type 'number' is not
@@ -521,7 +568,7 @@ order.total();                            // methods intact</code></pre>
     </div>
     <div class="compare">
       <div class="code">
-        <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">catalogue.ts</span></div>
+        <div class="code-head"><span class="name">catalogue.ts</span></div>
         <pre><code data-lang="ts">class Media {
   @IsString() title!: string;
 }
@@ -543,7 +590,7 @@ class Playlist {
 }</code></pre>
       </div>
       <div class="code">
-        <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">what comes out</span></div>
+        <div class="code-head"><span class="name">what comes out</span></div>
         <pre><code data-lang="ts">const list = fromJsonSync(Playlist, body);
 const first = list.items[0];
 
@@ -588,14 +635,14 @@ if (first instanceof Movie) {
     <div class="pg-grid">
       <div class="pg-pane">
         <div class="code-head" style="border:1px solid var(--code-border);border-bottom:none;border-radius:var(--radius-lg) var(--radius-lg) 0 0">
-          <span class="dot" aria-hidden="true"></span><span class="name">playground.ts</span>
+          <span class="name">playground.ts</span>
         </div>
         <textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"
                   aria-label="TypeScript source to run"></textarea>
       </div>
       <div class="pg-pane">
         <div class="code-head" style="border:1px solid var(--code-border);border-bottom:none;border-radius:var(--radius-lg) var(--radius-lg) 0 0">
-          <span class="dot" aria-hidden="true"></span><span class="name">output</span>
+          <span class="name">output</span>
           <span class="right" id="pg-status"></span>
         </div>
         <pre id="output" aria-live="polite" aria-atomic="false" role="status"></pre>
@@ -617,7 +664,7 @@ if (first instanceof Movie) {
       <p class="eyebrow">Diagnosability</p>
       <h2>Nothing fails quietly</h2>
       <p class="lede">
-        The 0.3.0 release exists because of this. A mapping layer that loses your data and reports
+        The 0.3.0 release existed because of this. A mapping layer that loses your data and reports
         success is worse than one that stops, so every silent failure found in the engine was turned
         into an error that names the cause and the way out.
       </p>
@@ -639,7 +686,7 @@ if (first instanceof Movie) {
     </div>
 
     <div style="margin-top:1.5rem" class="code">
-      <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">what you get instead</span></div>
+      <div class="code-head"><span class="name">what you get instead</span></div>
       <pre><code data-lang="text">JsonMappingError: lines[1].tags[0] is a Set, which cannot be serialized to JSON.
 Give the property a @JsonSerialize() serializer that converts it, or drop it from
 the output with @JsonIgnore().
@@ -663,7 +710,8 @@ Break the cycle with @JsonIgnore() on the back-reference, or supply a
       <h2>The toolchain cost, stated plainly</h2>
       <p class="lede">
         cereale reads the metadata that only a <strong>standard</strong> decorator transform emits, so
-        which compiler you use decides whether it works at all. The three ✓ rows are executed by a
+        which compiler you use decides whether it works at all. The three ✓ rows in the first table are
+        executed by a
         test on every CI run rather than asserted here — each one compiles a decorated class with
         that tool and checks the metadata arrived. The ✗ row cannot be: oxc ships inside a native
         binary with no standalone transform API, so it was established by hand, and the plugin below
@@ -678,7 +726,7 @@ Break the cycle with @JsonIgnore() on the back-reference, or supply a
           <tr><th scope="col">Transformer</th><th scope="col">Works</th><th scope="col">Setting</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>tsc</code></td><td><span class="tick">✓</span></td><td class="note"><code>experimentalDecorators: false</code>, <code>target: ES2022</code>+</td></tr>
+          <tr><td><code>tsc</code>&nbsp;5.2+</td><td><span class="tick">✓</span></td><td class="note"><code>experimentalDecorators: false</code>, <code>target: ES2022</code>+</td></tr>
           <tr><td>esbuild</td><td><span class="tick">✓</span></td><td class="note"><code>experimentalDecorators: false</code> via <code>tsconfigRaw</code>, <em>plus</em> esbuild's own top-level <code>target: es2022</code> — its default <code>esnext</code> leaves the decorators in place</td></tr>
           <tr><td>swc</td><td><span class="tick">✓</span></td><td class="note"><code>jsc.transform.decoratorVersion: "2022-03"</code></td></tr>
           <tr><td>oxc</td><td><span class="cross">✗</span></td><td class="note">used by <strong>Vite&nbsp;8</strong> and <strong>Vitest&nbsp;4</strong> — see below</td></tr>
@@ -701,21 +749,22 @@ Break the cycle with @JsonIgnore() on the back-reference, or supply a
         <tbody>
           <tr><td>Angular&nbsp;21</td><td><span class="tick">✓</span></td><td class="note">Flip the scaffolded <code>experimentalDecorators</code> to <code>false</code> — Angular does not need it</td></tr>
           <tr><td>React, Vue, Svelte&hellip;</td><td><span class="tick">✓</span></td><td class="note">Any Vite&nbsp;8 app — add the plugin below</td></tr>
-          <tr><td>Bun</td><td><span class="tick">✓</span></td><td class="note">Nothing</td></tr>
+          <tr><td>Bun&nbsp;1.3</td><td><span class="tick">✓</span></td><td class="note">Nothing</td></tr>
           <tr><td>Node + <code>tsc</code></td><td><span class="tick">✓</span></td><td class="note">Just the flag</td></tr>
           <tr><td>Next.js&nbsp;16</td><td><span class="warn-mark">~</span></td><td class="note">Not inline — keep models in a package compiled by <code>tsc</code></td></tr>
-          <tr><td>NestJS&nbsp;11</td><td><span class="warn-mark">~</span></td><td class="note">Not inline — its DI needs <code>emitDecoratorMetadata</code>; same precompiled route</td></tr>
+          <tr><td>NestJS&nbsp;11.1</td><td><span class="warn-mark">~</span></td><td class="note">Not inline — its DI needs <code>emitDecoratorMetadata</code>; same precompiled route</td></tr>
         </tbody>
       </table>
     </div>
     <p class="pg-note" style="max-width:var(--measure)">
-      Each of these was set up and run before it was written down.
+      Each of these was set up and run before it was written down, on 2026-08-05, against the
+      versions listed.
       <a href="https://github.com/avalon-vanguard/cereale/blob/main/FRAMEWORKS.md">FRAMEWORKS.md</a>
       has the full recipe for every one, including the two that need the precompiled route.
     </p>
 
     <div class="code" style="margin-top:1.25rem;max-width:640px">
-      <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">vite.config.ts</span></div>
+      <div class="code-head"><span class="name">vite.config.ts</span></div>
       <pre><code data-lang="ts">import { defineConfig } from 'vite';
 import { standardDecorators } from 'cereale/vite';
 
@@ -740,14 +789,14 @@ export default defineConfig({
   <div class="wrap">
     <div class="section-head">
       <p class="eyebrow">Getting started</p>
-      <h2>Two settings, and one caveat</h2>
+      <h2>Two settings, one caveat, and two ways in</h2>
     </div>
 
     <div class="compare">
       <div>
         <p class="compare-label"><span class="pill pill-ok">tsconfig.json</span> what the compiler needs</p>
         <div class="code">
-          <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">tsconfig.json</span></div>
+          <div class="code-head"><span class="name">tsconfig.json</span></div>
           <pre><code data-lang="text">{
   "compilerOptions": {
     "target": "ES2022",
@@ -767,20 +816,110 @@ export default defineConfig({
       <div>
         <p class="compare-label"><span class="pill pill-bad">not on npm yet</span> installing it today</p>
         <div class="code">
-          <div class="code-head"><span class="dot" aria-hidden="true"></span><span class="name">shell</span></div>
-          <pre><code data-lang="text">git clone https://github.com/Avalon-Vanguard/cereale
+          <div class="code-head"><span class="name">shell</span></div>
+          <pre><code data-lang="text" id="install-shell">git clone https://github.com/avalon-vanguard/cereale
 cd cereale
 npm install &amp;&amp; npm run build
-npm pack                    # → cereale-0.3.0.tgz
+npm pack                    # → cereale-0.4.0.tgz
 
 # then, from your own project
-npm install ../cereale/cereale-0.3.0.tgz</code></pre>
+npm install ../cereale/cereale-0.4.0.tgz</code></pre>
         </div>
         <p class="pg-note">
           <code class="inline-code">npm install cereale</code> does <strong>not</strong> resolve to
           this library — the name is unclaimed on the registry. Installing straight from GitHub
           will not work either: the build output is not committed, so the package would arrive
           without its <code class="inline-code">dist/</code>.
+        </p>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:1.75rem">
+      <h3>No bundler at all</h3>
+      <p>
+        <code class="inline-code">cereale/min</code> is the whole library flattened into one
+        minified ES module — <strong>33.9&nbsp;KB</strong>, 9.6&nbsp;KB gzipped — for import maps,
+        a bare <code class="inline-code">&lt;script type="module"&gt;</code>, Deno and Workers.
+      </p>
+      <div class="code">
+        <div class="code-head"><span class="name">index.html</span></div>
+        <pre><code data-lang="text">&lt;script type="importmap"&gt;
+  { "imports": { "cereale": "./node_modules/cereale/dist/cereale.min.js" } }
+&lt;/script&gt;
+&lt;script type="module"&gt;
+  import { IsString, toInstanceSync } from 'cereale';
+&lt;/script&gt;</code></pre>
+      </div>
+      <p class="pg-note">
+        <strong>If you are using a bundler, prefer the default entry.</strong> The flat file keeps
+        its purity annotations, so a bundler can still drop the rules you did not import — that
+        is pinned by a test — but the per-module build shakes slightly leaner (1,837 bytes
+        against 1,996 for one decorator) and is the canonical route.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ========================================================= size -->
+<section id="size" style="background:var(--bg-sunken);border-block:1px solid var(--border)">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Bundle size</p>
+      <h2>You pay for the decorators you name</h2>
+      <p class="lede">
+        <b class="js-dec-count">68</b> decorators is a lot to ship to a browser, so none of the ones you did not
+        import are shipped. Minified bytes, measured through all three bundlers.
+      </p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <caption class="sr-only">Minified bytes by import, across three bundlers</caption>
+        <thead>
+          <tr>
+            <th scope="col">What you import</th>
+            <th scope="col">esbuild</th><th scope="col">rollup</th><th scope="col">webpack</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>flattenErrors</code></td><td>394</td><td>367</td><td>394</td></tr>
+          <tr><td>one decorator</td><td>1,837</td><td>1,823</td><td>1,818</td></tr>
+          <tr><td><code>validateSync</code></td><td>3,722</td><td>3,554</td><td>3,738</td></tr>
+          <tr><td><code>toPlainSync</code></td><td>7,744</td><td>7,769</td><td>7,771</td></tr>
+          <tr><td><code>toInstanceSync</code></td><td>7,900</td><td>7,942</td><td>7,944</td></tr>
+          <tr><td>a typical DTO</td><td>10,395</td><td>10,402</td><td>10,360</td></tr>
+          <tr><td>the whole library</td><td>26,266</td><td>25,671</td><td>26,879</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="notes" style="margin-top:1.5rem">
+      <div class="note-item">
+        <h3>Reading and writing drop independently</h3>
+        <p>
+          Import <code class="inline-code">toInstanceSync</code> and you do not pay for the
+          serializer. The validator stays in both, because
+          <code class="inline-code">validate</code> defaults to
+          <code class="inline-code">true</code> — a real reference, not a missed optimisation.
+        </p>
+      </div>
+      <div class="note-item">
+        <h3>It did not come for free</h3>
+        <p>
+          Every rule is a top-level call. rollup proves such a call side-effect-free by reading
+          the factory; esbuild and webpack will not. Without a
+          <code class="inline-code">/*#__PURE__*/</code> on each, one decorator cost
+          <strong>4,909 bytes instead of 1,837</strong>. Nothing failed — the library was just
+          three times heavier in every bundle, and the only way to find out was to measure.
+        </p>
+      </div>
+      <div class="note-item">
+        <h3>rollup alone would have shown nothing</h3>
+        <p>
+          It was already producing 1,823 bytes and hid the problem. That is the argument for
+          measuring through more than one bundler, and it is why
+          <a href="https://github.com/avalon-vanguard/cereale/blob/main/src/treeshake.test.ts">a test</a>
+          now pins the property rather than the prose.
         </p>
       </div>
     </div>
@@ -812,7 +951,7 @@ npm install ../cereale/cereale-0.3.0.tgz</code></pre>
     <div class="ref-groups" id="ref-groups"></div>
     <noscript>
       <p class="ref-empty">The reference is rendered with JavaScript. The full list is in the
-        <a href="https://github.com/Avalon-Vanguard/cereale#api-reference">README</a>.</p>
+        <a href="https://github.com/avalon-vanguard/cereale#api-reference">README</a>.</p>
     </noscript>
   </div>
 </section>
@@ -860,7 +999,7 @@ npm install ../cereale/cereale-0.3.0.tgz</code></pre>
         </div>
         <div class="note-item">
           <h3>It is not on npm yet</h3>
-          <p>0.3.0 lives in the repository. <code class="inline-code">npm install cereale</code> does not
+          <p><span class="js-version">0.4.0</span> lives in the repository. <code class="inline-code">npm install cereale</code> does not
             resolve to this library — build it from source until it is published.</p>
         </div>
       </div>
@@ -874,9 +1013,9 @@ npm install ../cereale/cereale-0.3.0.tgz</code></pre>
   <div class="wrap foot-grid">
     <p style="margin:0">cereale — MIT licensed. Built by Avalon Vanguard.</p>
     <p style="margin:0">
-      <a href="https://github.com/Avalon-Vanguard/cereale">Source</a> ·
-      <a href="https://github.com/Avalon-Vanguard/cereale/blob/main/CHANGELOG.md">Changelog</a> ·
-      <a href="https://github.com/Avalon-Vanguard/cereale/issues">Issues</a>
+      <a href="https://github.com/avalon-vanguard/cereale">Source</a> ·
+      <a href="https://github.com/avalon-vanguard/cereale/blob/main/CHANGELOG.md">Changelog</a> ·
+      <a href="https://github.com/avalon-vanguard/cereale/issues">Issues</a>
     </p>
   </div>
 </footer>
