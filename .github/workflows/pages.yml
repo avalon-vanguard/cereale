@@ -6,9 +6,11 @@ name: Deploy Pages
 #
 # Triggered by CI completing on main rather than by the push itself, so a deploy
 # implies the full suite passed — type-check, lint, tests, build, entry points, docs.
-# A push that breaks a test turns main red and never reaches Pages; the previous
-# wiring deployed on any docs push, green CI or not. workflow_dispatch stays as the
-# manual escape hatch, and the deploy job refuses any ref that is not main.
+# A push that breaks a test turns main red and never reaches Pages. workflow_dispatch
+# stays as the manual escape hatch, and the deploy job refuses any ref that is not main.
+#
+# workflow_run cannot carry a `paths:` filter the way `push:` can, so the docs-changed
+# question is asked in a job instead — see the `changes` job below.
 #
 # REQUIRES A ONE-TIME SETTING. Settings → Pages → Build and deployment → Source must
 # be "GitHub Actions", not "Deploy from a branch". Until it is, the first run fails —
@@ -33,17 +35,92 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build and check
+  changes:
+    name: Did docs change?
     runs-on: ubuntu-latest
     # workflow_run fires on failure too — deploying is the one thing that must not.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      deployments: read
+    outputs:
+      docs: ${{ steps.check.outputs.docs }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        # For workflow_run the default checkout is the branch tip, which is not
+        # necessarily the commit CI just validated — two pushes in quick succession
+        # would deploy the newer one under the older one's green tick. Empty on
+        # workflow_dispatch, where the dispatched ref is what we want.
+        ref: ${{ github.event.workflow_run.head_sha }}
+        # Deep enough to reach whatever commit is currently live.
+        fetch-depth: 0
+    - id: check
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "Manual dispatch — deploying whatever the state of docs/ is."
+          echo "docs=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        api() { curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$@"; }
+        BASE="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY"
+
+        # What is actually live: the commit behind the newest *successful* Pages
+        # deployment. Comparing against that, rather than against HEAD^, is what keeps
+        # this correct when a push carries several commits (the change may be in any of
+        # them) and when the last deploy failed (the site is then a version further
+        # behind than the previous commit suggests).
+        DEPLOYMENTS=$(api "$BASE/deployments?environment=github-pages&per_page=10")
+        LIVE=""
+        for id in $(echo "$DEPLOYMENTS" | jq -r '.[].id'); do
+          state=$(api "$BASE/deployments/$id/statuses?per_page=1" | jq -r '.[0].state // empty')
+          if [ "$state" = "success" ]; then
+            LIVE=$(echo "$DEPLOYMENTS" | jq -r --argjson id "$id" '.[] | select(.id == $id) | .sha')
+            break
+          fi
+        done
+
+        if [ -z "$LIVE" ]; then
+          echo "No successful github-pages deployment to compare against — deploying."
+          echo "docs=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if ! git cat-file -e "${LIVE}^{commit}" 2>/dev/null; then
+          echo "Live commit $LIVE is not in this history (force push, or rebuilt branch) — deploying."
+          echo "docs=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "Live on Pages: $LIVE"
+        echo "This commit:   $GITHUB_SHA"
+        if git diff --quiet "$LIVE" HEAD -- docs/; then
+          echo "docs/ is byte-identical to what is already published — nothing to deploy."
+          echo "docs=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "docs/ changed:"
+          git diff --name-only "$LIVE" HEAD -- docs/ | sed 's/^/  /'
+          echo "docs=true" >> "$GITHUB_OUTPUT"
+        fi
+
+  build:
+    name: Build and check
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
     # This job runs third-party code (npm postinstall scripts, the build toolchain),
     # so it gets read-only. The Pages/OIDC grants live on the deploy job alone.
     permissions:
       contents: read
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.workflow_run.head_sha }}
     - uses: actions/setup-node@v4
       with:
         node-version: 22.x
