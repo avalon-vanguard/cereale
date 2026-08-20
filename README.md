@@ -1,5 +1,11 @@
 # Cereale
 
+[![CI](https://github.com/avalon-vanguard/cereale/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/avalon-vanguard/cereale/actions/workflows/ci.yml)
+[![Docs](https://github.com/avalon-vanguard/cereale/actions/workflows/pages.yml/badge.svg)](https://avalon-vanguard.github.io/cereale/)
+[![Node ≥20](https://img.shields.io/badge/node-%E2%89%A520-a0784a)](https://github.com/avalon-vanguard/cereale/blob/main/package.json)
+[![TypeScript 5.2+](https://img.shields.io/badge/TypeScript-5.2%2B-a0784a)](https://github.com/avalon-vanguard/cereale#installation)
+[![License: MIT](https://img.shields.io/badge/license-MIT-a0784a)](LICENSE)
+
 **Validated domain objects, not validated data.**
 
 Cereale maps JSON onto your own classes and gives you back real instances — with your methods,
@@ -28,8 +34,9 @@ user.greet();                            // your methods are still there
 **[avalon-vanguard.github.io/cereale](https://avalon-vanguard.github.io/cereale/)** — an
 interactive playground that runs this library in your browser, the full decorator reference,
 and the toolchain matrix. The page has no third-party dependencies — no CDN, no analytics, no webfonts; the only thing it
-fetches is its own vendored compiler, and only when you first press Run. It is served from
-`docs/` on `main`, and `npm run build:docs` rebuilds its assets to open locally.
+fetches is its own vendored compiler, and only when you first press Run. It deploys from
+`docs/` on `main` through Actions once CI is green, and `npm run build:docs` rebuilds its
+assets to open locally.
 
 ## Where it fits
 
@@ -72,8 +79,18 @@ entity, anything with behaviour attached. Reach for Zod when you just want the d
 
 ## Installation
 
+Not on npm yet: `npm install cereale` does **not** resolve to this library — the name is
+unclaimed on the registry. Installing straight from GitHub will not work either, because the
+build output is not committed. Until the first publish, install from a clone:
+
 ```bash
-npm install cereale
+git clone https://github.com/avalon-vanguard/cereale
+cd cereale
+npm install && npm run build
+npm pack                    # → cereale-0.4.0.tgz
+
+# then, from your own project
+npm install ../cereale/cereale-0.4.0.tgz
 ```
 
 Cereale uses **TC39 standard decorators** (since 0.2.0), so no `experimentalDecorators` flag:
@@ -104,7 +121,7 @@ inside a native binary with no standalone transform API.
 
 | Transformer | Status | Notes |
 | --- | --- | --- |
-| `tsc` | ✅ | With `experimentalDecorators: false` and `target: ES2022`+ |
+| `tsc` 5.2+ | ✅ | With `experimentalDecorators: false` and `target: ES2022`+ |
 | esbuild | ✅ | `experimentalDecorators: false` via `tsconfigRaw`, **plus** esbuild's own top-level `target: es2022`. Its default `esnext` target leaves decorator syntax in the output |
 | swc | ✅ | `jsc.transform.decoratorVersion: "2022-03"` |
 | **oxc** | ❌ | Used by **Vite 8** and **Vitest 4** — see below |
@@ -118,10 +135,10 @@ was written. The short version:
 | --- | --- | --- |
 | **Angular** 21 | ✅ | Flip the scaffolded `experimentalDecorators` to `false`. Angular does not need it — `ngtsc` erases its own decorators itself |
 | **React, Vue, Svelte, Solid, Astro, Nuxt** | ✅ | Any Vite 8 app: add the `cereale/vite` plugin below |
-| **Bun** | ✅ | No configuration |
+| **Bun** 1.3 | ✅ | No configuration |
 | **Node** + `tsc` | ✅ | Just the flag |
 | **Next.js** 16 | ⚠️ | Not inline: it derives both the SWC parser *and* the transform from one flag, so decorators either compile legacy or fail to parse. Keep your models in a package compiled by `tsc` |
-| **NestJS** 11 | ⚠️ | Not inline: its DI needs `emitDecoratorMetadata`. Same precompiled-package route — verified working alongside `@Injectable()` in a program with both legacy flags on |
+| **NestJS** 11.1 | ⚠️ | Not inline: its DI needs `emitDecoratorMetadata`. Same precompiled-package route — verified working alongside `@Injectable()` in a program with both legacy flags on |
 
 **If you are on Vite 8 or Vitest 4**, oxc leaves decorator syntax in the output without
 reporting anything: `vitest` prints `0 test` next to a bare `SyntaxError`, and `vite build`
