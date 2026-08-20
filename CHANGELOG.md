@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-08-20
+
+No code changes. Every emitted file is byte-identical to 0.4.0 except the banner line of
+`dist/cereale.min.js`, which carries the version string. This exists because the README
+inside the 0.4.0 tarball is the one npmjs.com renders, and it said the package was not on
+npm: *"`npm install cereale` does not resolve to this library — the name is unclaimed on
+the registry."* True when it was written, nonsense on the package page of the thing it
+describes.
+
+0.4.0 was the first publish, so nothing could have carried the corrected text: the docs
+could only be fixed after the registry proved the claim wrong. The install instructions,
+the landing page panel, and the "what cereale is not" entry now say `npm install cereale`,
+and the README carries an npm version badge.
+
 ## [0.4.0] - 2026-08-05
 
 ### `cereale/min` — one file, no bundler
