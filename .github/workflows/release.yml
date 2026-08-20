@@ -4,10 +4,28 @@ name: Publish to npm
 # not a decision to make it public and immutable, and npm's 72-hour unpublish window makes the
 # second one hard to take back. Run this workflow from the Actions tab when you mean it.
 #
-# Before the first real run:
-#   1. Create an npm automation token and add it as the NPM_TOKEN repository secret.
-#   2. Run once with dry_run left as `true` and read the file list it prints.
-#   3. Run again with dry_run set to `false`.
+# Authentication is by **trusted publishing** (OIDC): npm exchanges the workflow's
+# short-lived GitHub identity token for a publish token scoped to this package, so no
+# long-lived npm token has to exist. To enable it, on npmjs.com → the cereale package →
+# Settings → Trusted publisher → GitHub Actions, set:
+#
+#   Organization or user: avalon-vanguard
+#   Repository:           cereale
+#   Workflow filename:    release.yml
+#   Environment:          (leave blank — this workflow does not use one)
+#
+# The workflow filename must match this file's name, and the Environment field must be
+# blank unless a matching `environment:` is added to the publish job; npm checks both
+# against the OIDC claims and refuses the exchange if either disagrees.
+#
+# NPM_TOKEN is kept as a fallback. npm's OIDC step is deliberately non-throwing — if the
+# trusted publisher is not configured, or the CLI is too old, it logs and falls through
+# to token auth. That makes the switch safe to land before the registry side is set up.
+# Once a real run shows OIDC working, the NPM_TOKEN secret can be deleted.
+#
+# Before a real run:
+#   1. Run once with dry_run left as `true` and read the file list it prints.
+#   2. Run again with dry_run set to `false`.
 on:
   workflow_dispatch:
     inputs:
@@ -18,7 +36,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write        # required for npm provenance
+  id-token: write        # the OIDC identity npm exchanges, and provenance
 
 jobs:
   publish:
@@ -36,6 +54,21 @@ jobs:
           node-version: 22.x
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
+
+      # Node 22 bundles npm 10.x, which has no OIDC support at all — it would skip
+      # trusted publishing in silence and fall back to token auth. Trusted publishing
+      # landed in npm 11.5.0 (lib/utils/oidc.js), so the version is raised and then
+      # asserted rather than assumed.
+      - name: Use an npm that can do trusted publishing
+        run: |
+          npm install -g npm@latest
+          V=$(npm --version)
+          echo "npm $V"
+          MAJ=${V%%.*}; REST=${V#*.}; MIN=${REST%%.*}
+          if [ "$MAJ" -lt 11 ] || { [ "$MAJ" -eq 11 ] && [ "$MIN" -lt 5 ]; }; then
+            echo "::error::npm $V has no OIDC support; trusted publishing needs >= 11.5.0"
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -72,12 +105,28 @@ jobs:
         run: npm run verify
 
       - name: Show exactly what would ship
+        # `npm publish --dry-run` performs the OIDC token exchange before it short-circuits
+        # (publish.js calls oidc() ahead of every dryRun branch), so this step is also the
+        # trusted-publishing smoke test — a dry run proves the exchange without publishing.
+        #
+        # verbose, because npm's OIDC step is non-throwing: at the default log level a
+        # successful exchange and a silent fallback to token auth look identical. Success
+        # prints `oidc Successfully retrieved and set token`; if that line is missing,
+        # trusted publishing did not engage. (The reasons it skips are logged at silly.)
+        env:
+          NPM_CONFIG_LOGLEVEL: verbose
         run: npm publish --dry-run
 
       - name: Publish
         if: ${{ inputs.dry_run == false }}
+        # --provenance stays explicit. Under OIDC npm would enable it on its own for a
+        # public repo, but only when the flag was left at its default; asking for it
+        # directly just skips that auto-enable and reaches the same place. On the token
+        # fallback path it is the only thing that produces an attestation at all.
         run: npm publish --provenance --access public
         env:
+          # Fallback only. Ignored once the trusted publisher is configured, because npm
+          # sets its own short-lived token before reading credentials.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Summary

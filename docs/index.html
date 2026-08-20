@@ -814,22 +814,15 @@ export default defineConfig({
       </div>
 
       <div>
-        <p class="compare-label"><span class="pill pill-bad">not on npm yet</span> installing it today</p>
+        <p class="compare-label"><span class="pill pill-ok">on npm</span> installing it</p>
         <div class="code">
           <div class="code-head"><span class="name">shell</span></div>
-          <pre><code data-lang="text" id="install-shell">git clone https://github.com/avalon-vanguard/cereale
-cd cereale
-npm install &amp;&amp; npm run build
-npm pack                    # → cereale-0.4.0.tgz
-
-# then, from your own project
-npm install ../cereale/cereale-0.4.0.tgz</code></pre>
+          <pre><code data-lang="text">npm install cereale</code></pre>
         </div>
         <p class="pg-note">
-          <code class="inline-code">npm install cereale</code> does <strong>not</strong> resolve to
-          this library — the name is unclaimed on the registry. Installing straight from GitHub
-          will not work either: the build output is not committed, so the package would arrive
-          without its <code class="inline-code">dist/</code>.
+          Published from CI with <strong>provenance</strong>, so the registry carries a verified
+          attestation linking the tarball to the commit it was built from — visible on the
+          <a href="https://www.npmjs.com/package/cereale">package page</a>.
         </p>
       </div>
     </div>
@@ -998,9 +991,11 @@ npm install ../cereale/cereale-0.4.0.tgz</code></pre>
             cannot reach. Both are errors rather than silent no-ops.</p>
         </div>
         <div class="note-item">
-          <h3>It is not on npm yet</h3>
-          <p><span class="js-version">0.4.0</span> lives in the repository. <code class="inline-code">npm install cereale</code> does not
-            resolve to this library — build it from source until it is published.</p>
+          <h3>It is still 0.x</h3>
+          <p><span class="js-version">0.4.0</span> is published, and under semver a 0.x minor bump
+            is allowed to break you. Pin the version until 1.0; the
+            <a href="https://github.com/avalon-vanguard/cereale/blob/main/CHANGELOG.md">changelog</a>
+            says what moved and why.</p>
         </div>
       </div>
     </div>
