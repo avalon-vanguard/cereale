@@ -49,6 +49,27 @@ await writeFile(
   `window.CEREALE_META = ${JSON.stringify({ version: pkg.version, node: pkg.engines.node }, null, 2)};\n`
 );
 
+// 2b. The same version, stamped into the two spots in index.html that page.js later
+//     overwrites from meta.js. Those are the no-JavaScript fallbacks: correct in a browser,
+//     stale in a text reader or a scraper, and hand-bumped until now — they went stale on
+//     0.4.0 and again on 0.4.1. Stamping them here means the docs-sync gate catches the
+//     drift instead of a reviewer. The regexes are asserted, so if the markup is renamed
+//     the build fails loudly rather than silently stamping nothing.
+const indexPath = path.join(docs, 'index.html');
+let index = await readFile(indexPath, 'utf8');
+const stamps = [
+  [/(<span class="badge" id="version-badge">)v[\d.]+(<\/span>)/, `$1v${pkg.version}$2`],
+  [/(<span class="js-version">)[\d.]+(<\/span>)/g, `$1${pkg.version}$2`],
+];
+for (const [re, replacement] of stamps) {
+  if (!re.test(index)) {
+    console.error(`build-docs: nothing in docs/index.html matched ${re} — the version fallback markup moved.`);
+    process.exit(1);
+  }
+  index = index.replace(re, replacement);
+}
+await writeFile(indexPath, index);
+
 // 3. The compiler errors the page quotes, produced by actually running the compiler. If a
 //    snippet the page calls a compile error ever compiles, this fails the build.
 const { byCase, problems } = await collectDiagnostics(root);

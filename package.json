@@ -1,6 +1,6 @@
 {
   "name": "cereale",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Strongly typed JSON mapping and validation for TypeScript classes \u2014 validated domain objects, not validated data. A zero-dependency replacement for class-validator + class-transformer, on TC39 standard decorators.",
   "type": "module",
   "main": "./dist/cjs/index.js",
