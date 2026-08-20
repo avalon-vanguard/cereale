@@ -105,6 +105,16 @@ jobs:
         run: npm run verify
 
       - name: Show exactly what would ship
+        # `npm publish --dry-run` performs the OIDC token exchange before it short-circuits
+        # (publish.js calls oidc() ahead of every dryRun branch), so this step is also the
+        # trusted-publishing smoke test — a dry run proves the exchange without publishing.
+        #
+        # verbose, because npm's OIDC step is non-throwing: at the default log level a
+        # successful exchange and a silent fallback to token auth look identical. Success
+        # prints `oidc Successfully retrieved and set token`; if that line is missing,
+        # trusted publishing did not engage. (The reasons it skips are logged at silly.)
+        env:
+          NPM_CONFIG_LOGLEVEL: verbose
         run: npm publish --dry-run
 
       - name: Publish
