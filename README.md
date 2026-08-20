@@ -1,5 +1,6 @@
 # Cereale
 
+[![npm](https://img.shields.io/npm/v/cereale?color=a0784a&label=npm)](https://www.npmjs.com/package/cereale)
 [![CI](https://github.com/avalon-vanguard/cereale/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/avalon-vanguard/cereale/actions/workflows/ci.yml)
 [![Docs](https://github.com/avalon-vanguard/cereale/actions/workflows/pages.yml/badge.svg)](https://avalon-vanguard.github.io/cereale/)
 [![Node ≥20](https://img.shields.io/badge/node-%E2%89%A520-a0784a)](https://github.com/avalon-vanguard/cereale/blob/main/package.json)
@@ -79,19 +80,12 @@ entity, anything with behaviour attached. Reach for Zod when you just want the d
 
 ## Installation
 
-Not on npm yet: `npm install cereale` does **not** resolve to this library — the name is
-unclaimed on the registry. Installing straight from GitHub will not work either, because the
-build output is not committed. Until the first publish, install from a clone:
-
 ```bash
-git clone https://github.com/avalon-vanguard/cereale
-cd cereale
-npm install && npm run build
-npm pack                    # → cereale-0.4.0.tgz
-
-# then, from your own project
-npm install ../cereale/cereale-0.4.0.tgz
+npm install cereale
 ```
+
+Published with [provenance](https://www.npmjs.com/package/cereale), so the registry carries a
+verified attestation linking the tarball to the commit it was built from.
 
 Cereale uses **TC39 standard decorators** (since 0.2.0), so no `experimentalDecorators` flag:
 
