@@ -1,5 +1,9 @@
 {
   // Visit https://aka.ms/tsconfig to read more about this file
+  // Shared (@avalon-vanguard/config/tsconfig/library.json): sourceMap, declaration,
+  // declarationMap, noImplicitReturns, noImplicitOverride, noFallthroughCasesInSwitch,
+  // isolatedModules, skipLibCheck.
+  "extends": "@avalon-vanguard/config/tsconfig/library.json",
   "compilerOptions": {
     // File Layout
     "rootDir": "src",
@@ -11,27 +15,17 @@
     "lib": ["ESNext", "ESNext.Decorators"],
     "types": ["node"],
 
-    // Other Outputs
-    "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
-
     // Stricter Typechecking Options
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
 
     // Style Options
-    "noImplicitReturns": true,
-    "noImplicitOverride": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
 
     // Recommended Options
     "strict": true,
     "strictPropertyInitialization": false,
-    "isolatedModules": true,
-    "skipLibCheck": true,
 
     // NOTE: no `experimentalDecorators`. v2 uses TC39 standard decorators, which is what
     // gives ClassFieldDecoratorContext<This, Value> and therefore compile-time checking of

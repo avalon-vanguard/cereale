@@ -1,4 +1,4 @@
-import eslint from '@eslint/js';
+import avalonBase from '@avalon-vanguard/config/eslint';
 import tseslint from 'typescript-eslint';
 import globals from 'globals';
 
@@ -6,8 +6,8 @@ export default tseslint.config(
   {
     ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'docs/**'],
   },
-  eslint.configs.recommended,
-  ...tseslint.configs.recommended,
+  // @eslint/js recommended + typescript-eslint recommended, shared across avalon-vanguard
+  avalonBase,
   {
     languageOptions: {
       globals: {
