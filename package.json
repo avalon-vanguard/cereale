@@ -42,6 +42,7 @@
     "build:docs": "node scripts/build-docs.mjs",
     "demo": "node --no-warnings=ExperimentalWarning --loader ts-node/esm src/example.ts",
     "type-check": "tsc --noEmit",
+    "typecheck": "npm run type-check",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -49,6 +50,7 @@
     "lint:fix": "eslint . --fix",
     "verify": "npm run type-check && npm run lint && npm run test && npm run build && npm run check:types && npm run check:docs",
     "prepublishOnly": "npm run verify",
+    "check": "node scripts/check-entry-points.mjs && npm run demo && npm run check:types && npm run check:docs && npm run check:docs-sync",
     "check:docs": "node scripts/check-docs.mjs",
     "check:types": "node scripts/check-types.mjs",
     "check:docs-sync": "npm run build:docs && node scripts/check-docs-sync.mjs"
@@ -79,6 +81,7 @@
   },
   "homepage": "https://avalon-vanguard.github.io/cereale/",
   "devDependencies": {
+    "@avalon-vanguard/config": "^1.0.0",
     "@babel/standalone": "^8.0.4",
     "@eslint/js": "^10.0.1",
     "@swc/core": "^1.15.47",
