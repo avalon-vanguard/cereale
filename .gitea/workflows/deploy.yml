@@ -1,6 +1,7 @@
 # Construit l'image de cereale, la pousse dans le registre Gitea et la déploie dans Openship :
 # service interne, sans domaine, que la passerelle projects.avalonvanguard.com sert sous /cereale/.
-# Secret : OPENSHIP_API_TOKEN, secret de l'organisation Gitea hérité par ce dépôt.
+# Secret du dépôt : OPENSHIP_API_TOKEN, jeton Openship limité au projet « cereale ». Il passe devant
+# celui de l'organisation, qui ne couvre que « projects » : ne pas le supprimer.
 name: Deploy
 
 on:
