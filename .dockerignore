@@ -1,0 +1,4 @@
+# Seuls la page construite et la configuration nginx entrent dans l'image
+*
+!docs
+!nginx.conf
