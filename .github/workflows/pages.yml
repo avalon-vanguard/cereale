@@ -46,7 +46,7 @@ jobs:
     outputs:
       docs: ${{ steps.check.outputs.docs }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         # For workflow_run the default checkout is the branch tip, which is not
         # necessarily the commit CI just validated — two pushes in quick succession
@@ -118,7 +118,7 @@ jobs:
     permissions:
       contents: read
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         ref: ${{ github.event.workflow_run.head_sha }}
     - uses: actions/setup-node@v4

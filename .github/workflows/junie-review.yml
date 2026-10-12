@@ -37,7 +37,7 @@ jobs:
       issues: write          # the PR conversation is an issue timeline to the API
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Review the pull request
       # Pinned to the commit behind release v1.7.4. A tag is a mutable ref the
       # publisher can repoint; only the SHA guarantees the version running is the

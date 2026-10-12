@@ -43,7 +43,7 @@ jobs:
     name: ${{ inputs.dry_run && 'Dry run' || 'Publish' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Tags are not fetched at the default depth, and the version gate below
           # resolves one — without this it fails on every release, tag or no tag.
