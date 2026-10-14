@@ -1,0 +1,11 @@
+# Relecture de chaque PR par Junie (JetBrains) : avalon-vanguard/ci/.gitea/workflows/junie-review.yml.
+name: Junie review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    uses: avalon-vanguard/ci/.gitea/workflows/junie-review.yml@v1
+    secrets: inherit
