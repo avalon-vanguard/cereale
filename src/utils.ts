@@ -1185,13 +1185,13 @@ export async function fromRequest<T>(
  * @deprecated Use standalone functions like toPlain, toInstance, etc.
  */
 export class JsonMapper {
-  static toPlain = toPlain;
-  static toJson = toJson;
-  static toInstance = toInstance;
-  static toInstanceArray = toInstanceArray;
-  static fromJson = fromJson;
-  static fromJsonArray = fromJsonArray;
-  static fromRequest = fromRequest;
-  static validate = validate;
-  static validateOrReject = validateOrReject;
+  static readonly toPlain = toPlain;
+  static readonly toJson = toJson;
+  static readonly toInstance = toInstance;
+  static readonly toInstanceArray = toInstanceArray;
+  static readonly fromJson = fromJson;
+  static readonly fromJsonArray = fromJsonArray;
+  static readonly fromRequest = fromRequest;
+  static readonly validate = validate;
+  static readonly validateOrReject = validateOrReject;
 }

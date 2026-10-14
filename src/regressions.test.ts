@@ -315,7 +315,7 @@ describe('regressions', () => {
       }
       class T {
         @JsonSerialize(IsoDate)
-        when?: Date | undefined;
+        when: Date | undefined;
 
         @IsString()
         other: string;

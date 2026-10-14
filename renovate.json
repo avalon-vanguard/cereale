@@ -1,4 +1,5 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>avalon-vanguard/renovate-config"]
+  "extends": ["local>avalon-vanguard/renovate-config"],
+  "osvVulnerabilityAlerts": true
 }

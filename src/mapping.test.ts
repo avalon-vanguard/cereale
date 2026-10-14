@@ -499,7 +499,7 @@ describe('renaming and the unknown-key policy', () => {
     );
 
     expect(order.ref).toBe('A-1');
-    expect(order.address instanceof Address).toBe(true);
+    expect(order.address).toBeInstanceOf(Address);
   });
 
   // A stale name is a mismatch with whatever produced the payload, not a deliberate refusal
