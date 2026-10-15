@@ -4,13 +4,12 @@ name: Deploy Pages
 # directly, so the page is rebuilt from src/ and checked before it goes live instead
 # of after.
 #
-# Triggered by CI completing on main rather than by the push itself, so a deploy
-# implies the full suite passed — type-check, lint, tests, build, entry points, docs.
-# A push that breaks a test turns main red and never reaches Pages. workflow_dispatch
-# stays as the manual escape hatch, and the deploy job refuses any ref that is not main.
+# Deploys on every push to main. The code was already gated by CI on Gitea before it
+# was merged and mirrored here, so this workflow only publishes. workflow_dispatch stays
+# as the manual escape hatch, and the deploy job refuses any ref that is not main.
 #
-# workflow_run cannot carry a `paths:` filter the way `push:` can, so the docs-changed
-# question is asked in a job instead — see the `changes` job below.
+# The docs-changed question is asked in a job rather than by a `paths:` filter, which
+# could not see a deploy that failed earlier — see the `changes` job below.
 #
 # REQUIRES A ONE-TIME SETTING. Settings → Pages → Build and deployment → Source must
 # be "GitHub Actions", not "Deploy from a branch". Until it is, the first run fails —
@@ -22,9 +21,7 @@ name: Deploy Pages
 # the old behaviour and this workflow simply stops being able to deploy.
 
 on:
-  workflow_run:
-    workflows: [ CI ]
-    types: [ completed ]
+  push:
     branches: [ main ]
   workflow_dispatch:
 
@@ -38,8 +35,6 @@ jobs:
   changes:
     name: Did docs change?
     runs-on: ubuntu-latest
-    # workflow_run fires on failure too — deploying is the one thing that must not.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
       deployments: read
@@ -48,11 +43,6 @@ jobs:
     steps:
     - uses: actions/checkout@v7
       with:
-        # For workflow_run the default checkout is the branch tip, which is not
-        # necessarily the commit CI just validated — two pushes in quick succession
-        # would deploy the newer one under the older one's green tick. Empty on
-        # workflow_dispatch, where the dispatched ref is what we want.
-        ref: ${{ github.event.workflow_run.head_sha }}
         # Deep enough to reach whatever commit is currently live.
         fetch-depth: 0
     - id: check
@@ -119,8 +109,6 @@ jobs:
       contents: read
     steps:
     - uses: actions/checkout@v7
-      with:
-        ref: ${{ github.event.workflow_run.head_sha }}
     - uses: actions/setup-node@v4
       with:
         node-version: 22.x
@@ -129,7 +117,7 @@ jobs:
       run: npm ci
     - name: The committed page is in sync with src/
       # Rebuilds from src/ and fails on any difference, new untracked files included.
-      # Same script CI runs, so the two workflows cannot drift apart.
+      # Same script the Gitea CI runs, so the two workflows cannot drift apart.
       run: npm run check:docs-sync
     - name: The page loads nothing from the network
       run: npm run check:docs

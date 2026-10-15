@@ -1,7 +1,6 @@
 # Cereale
 
 [![npm](https://img.shields.io/npm/v/cereale?color=a0784a&label=npm)](https://www.npmjs.com/package/cereale)
-[![CI](https://github.com/avalon-vanguard/cereale/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/avalon-vanguard/cereale/actions/workflows/ci.yml)
 [![Docs](https://github.com/avalon-vanguard/cereale/actions/workflows/pages.yml/badge.svg)](https://avalon-vanguard.github.io/cereale/)
 [![Node ≥20](https://img.shields.io/badge/node-%E2%89%A520-a0784a)](https://github.com/avalon-vanguard/cereale/blob/main/package.json)
 [![TypeScript 5.2+](https://img.shields.io/badge/TypeScript-5.2%2B-a0784a)](https://github.com/avalon-vanguard/cereale#installation)
