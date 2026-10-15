@@ -2,7 +2,7 @@
 # qui transmet le chemin tel quel et pose les en-têtes de sécurité et la compression.
 # La page docs/ est déjà construite et commitée (la CI vérifie qu'elle suit src/) : rien à
 # compiler, une seule étape suffit.
-FROM nginx:1.29-alpine
+FROM nginx:1.31-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY docs/ /usr/share/nginx/html/cereale/
 # Aperçus de liens : adresse canonique de la passerelle au lieu de github.io
