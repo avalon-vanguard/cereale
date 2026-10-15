@@ -1,6 +1,5 @@
-# Contrôles de .github/workflows/ci.yml sur Gitea, par le workflow commun avalon-vanguard/ci.
-# Ce dossier fait ignorer .github/workflows par Gitea ; GitHub continue d'exécuter les siens
-# (CI, Pages, publication npm). Les contrôles post-build (points d'entrée, démo, types publiés,
+# Contrôles de CI sur Gitea, par le workflow commun avalon-vanguard/ci.
+# GitHub (miroir en lecture seule) n'exécute plus que Pages et la publication npm. Les contrôles post-build (points d'entrée, démo, types publiés,
 # page de docs) sont regroupés dans le script « check ».
 #
 # node.yml lance « npm test », pas « test:coverage » : vitest.config.ts ne fixe aucun seuil de

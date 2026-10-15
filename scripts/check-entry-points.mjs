@@ -1,8 +1,7 @@
 /**
  * Fails if a published entry point does not load from dist/: `.` and `./vite`, each as ESM
  * and as CommonJS, and the flat `./min` bundle. Run after `npm run build` (first step of
- * `npm run check`). Moved here from inline `node -e` lines in .github/workflows/ci.yml so
- * that the GitHub and Gitea workflows run the same check.
+ * `npm run check`). Moved here from inline `node -e` lines in the CI workflow.
  */
 import { createRequire } from 'node:module';
 

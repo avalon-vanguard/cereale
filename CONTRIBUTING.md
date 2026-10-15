@@ -48,11 +48,11 @@ To get started with development, follow these steps:
 3.  Add or update documentation as needed.
 4.  Run the tests to verify your changes: `npm test`.
 5.  Commit your changes with a descriptive message.
-6.  Push your branch to GitHub and open a Pull Request.
+6.  Push your branch to the project's Gitea repository and open a Pull Request there. The GitHub repository is a read-only mirror: a Pull Request opened on GitHub cannot be merged directly.
 
 ## Bug Reports and Feature Requests
 
-Please use GitHub Issues to report bugs or suggest new features. Provide as much detail as possible, including steps to reproduce bugs and clear descriptions of feature requests.
+Please open an issue on GitHub to report bugs or suggest new features. Provide as much detail as possible, including steps to reproduce bugs and clear descriptions of feature requests. Issues are read on the mirror and handled on Gitea.
 
 ---
 
