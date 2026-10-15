@@ -117,7 +117,7 @@ jobs:
       run: npm ci
     - name: The committed page is in sync with src/
       # Rebuilds from src/ and fails on any difference, new untracked files included.
-      # Same script CI runs, so the two workflows cannot drift apart.
+      # Same script the Gitea CI runs, so the two workflows cannot drift apart.
       run: npm run check:docs-sync
     - name: The page loads nothing from the network
       run: npm run check:docs
