@@ -8,4 +8,5 @@ on:
 jobs:
   review:
     uses: avalon-vanguard/ci/.gitea/workflows/junie-review.yml@v1
-    secrets: inherit
+    secrets:
+      JUNIE_DOPBASE_TOKEN: ${{ secrets.JUNIE_DOPBASE_TOKEN }}
