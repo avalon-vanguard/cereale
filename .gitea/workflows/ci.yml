@@ -2,8 +2,8 @@
 # GitHub (miroir en lecture seule) n'exécute plus que Pages et la publication npm. Les contrôles post-build (points d'entrée, démo, types publiés,
 # page de docs) sont regroupés dans le script « check ».
 #
-# node.yml lance « npm test », pas « test:coverage » : vitest.config.ts ne fixe aucun seuil de
-# couverture et rien ne lit le rapport lcov, donc les mêmes tests décident du résultat.
+# The job runs "npm run test:coverage" and fails below 80 % total line coverage, read from
+# coverage/coverage-summary.json (default floor of node.yml@v2).
 name: CI
 
 on:
@@ -18,7 +18,8 @@ jobs:
       fail-fast: false
       matrix:
         node: [20.x, 22.x, 24.x]
-    uses: avalon-vanguard/ci/.gitea/workflows/node.yml@v1
+    uses: avalon-vanguard/ci/.gitea/workflows/node.yml@v2
     with:
       node-version: ${{ matrix.node }}
+      coverage: true
     secrets: inherit
