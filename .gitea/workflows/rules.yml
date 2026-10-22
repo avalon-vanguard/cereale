@@ -1,0 +1,12 @@
+# Managed file, synced from avalon-vanguard/ci. Change it there, not here.
+name: rules
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [develop, main]
+
+jobs:
+  rules:
+    uses: avalon-vanguard/ci/.gitea/workflows/rules-check.yml@4c16457cfed4057d3804f890e73185c11b32ae3b
