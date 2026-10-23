@@ -12,7 +12,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       enabled: true,
-      reporter: ['text', 'lcov'],
+      reporter: ['text', 'lcov', 'json-summary'],
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.test.ts', 'src/example.ts', 'src/index.ts'],
       // Mesuré : 96,69 / 91,62 / 99,64 / 97,95 — seuil = plancher − 1.
