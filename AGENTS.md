@@ -21,6 +21,7 @@ Gitmoji + conventional commits, in English: `✨ feat(scope): add sticky bar`.
 Scope is optional, `!` before `:` marks a breaking change. Use the emoji character, not
 `:shortcode:`. The PR title becomes the squashed commit on `develop`, and CI checks it.
 
+<!-- prettier-ignore -->
 | Emoji | Type |
 |---|---|
 | ✨ | feat |

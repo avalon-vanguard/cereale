@@ -9,4 +9,4 @@ on:
 
 jobs:
   rules:
-    uses: avalon-vanguard/ci/.gitea/workflows/rules-check.yml@4c16457cfed4057d3804f890e73185c11b32ae3b
+    uses: avalon-vanguard/ci/.gitea/workflows/rules-check.yml@aebedd5b69304f33a60e5c65915327df36a70c5b
