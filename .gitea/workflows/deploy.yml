@@ -12,7 +12,7 @@ on:
 
 jobs:
   deploy:
-    uses: avalon-vanguard/ci/.gitea/workflows/image.yml@v1
+    uses: avalon-vanguard/ci/.gitea/workflows/image.yml@v2
     with:
       openship-project: proj_a0A_iEcpcD2hSrn2
       openship-service: svc_Igg8bxQBVAx-ReBZ
