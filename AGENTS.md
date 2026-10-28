@@ -22,22 +22,24 @@ Scope is optional, `!` before `:` marks a breaking change. Use the emoji charact
 `:shortcode:`. The PR title becomes the squashed commit on `develop`, and CI checks it.
 
 <!-- prettier-ignore -->
-| Emoji | Type |
+| Type | Emojis |
 |---|---|
-| ✨ | feat |
-| 🐛 | fix |
-| 🚑️ | fix (hotfix into main) |
-| 📝 | docs |
-| 🎨 | style |
-| ♻️ | refactor |
-| ⚡️ | perf |
-| ✅ | test |
-| 📦️ | build |
-| 👷 | ci |
-| 🔧 | chore |
-| 🔖 | chore(release), PRs `develop` -> `main` |
-| ⏪️ | revert |
-| 🌐 | i18n |
+| feat | ✨ 💄 🎉 📈 💥 🍱 ♿️ 💬 🗃️ 🔊 🚸 📱 🥚 ⚗️ 🔍️ 🌱 🚩 💫 🛂 👔 🩺 🧵 🦺 ✈️ |
+| fix | 🐛 🚑️ 💄 🔒️ 🚨 💚 ✏️ 👽️ 💥 ♿️ 💬 🗃️ 🚸 📱 🔍️ 🏷️ 🥅 🛂 🩹 👔 🩺 🧵 🦺 ✈️ |
+| docs | 📝 ✏️ 📄 💡 👥 |
+| style | 🎨 💄 🚨 💫 |
+| refactor | 🎨 ♻️ 🔥 👽️ 🚚 💥 🗃️ 🔇 🏗️ 🏷️ 🗑️ ⚰️ |
+| perf | ⚡️ 🧵 |
+| test | ✅ 🤡 📸 🧪 |
+| build | 📦️ ⬇️ ⬆️ 📌 ➕ ➖ 🧱 |
+| ci | 👷 🚀 💚 🧱 |
+| chore | 🔧 🔖 🔥 🚀 🎉 🔐 ⬇️ ⬆️ 📌 ➕ ➖ 🔨 📄 🍱 🔊 🔇 👥 🙈 ⚗️ 🌱 🚩 🗑️ 🧐 🧱 🧑‍💻 💸 |
+| revert | ⏪️ |
+| i18n | 🌐 |
+
+🔖 is only for `chore(release)` (PRs `develop` -> `main`), and `chore(release)` must use 🔖.
+A PR into `main` from `fix/*` must be titled `🚑️ fix...` (hotfix).
+Not accepted: 🚧, 💩, 🍻, 🔀.
 
 ## Language
 
