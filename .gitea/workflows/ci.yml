@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [22.x, 24.x]
+        node: [22.x, 24.x, 26.x]
     uses: avalon-vanguard/ci/.gitea/workflows/node.yml@v2
     with:
       node-version: ${{ matrix.node }}
