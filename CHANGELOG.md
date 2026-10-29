@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** Node 22 or later is required (`engines.node` is now `>=22.0.0`). Node 20 reached end of life on 2026-04-30 and is no longer tested or supported.
+
 ## [0.4.1] - 2026-08-20
 
 No code changes. Every emitted file is byte-identical to 0.4.0 except the banner line of

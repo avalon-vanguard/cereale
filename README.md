@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/cereale?color=a0784a&label=npm)](https://www.npmjs.com/package/cereale)
 [![Docs](https://github.com/avalon-vanguard/cereale/actions/workflows/pages.yml/badge.svg)](https://avalon-vanguard.github.io/cereale/)
-[![Node ≥20](https://img.shields.io/badge/node-%E2%89%A520-a0784a)](https://github.com/avalon-vanguard/cereale/blob/main/package.json)
+[![Node ≥22](https://img.shields.io/badge/node-%E2%89%A522-a0784a)](https://github.com/avalon-vanguard/cereale/blob/main/package.json)
 [![TypeScript 5.2+](https://img.shields.io/badge/TypeScript-5.2%2B-a0784a)](https://github.com/avalon-vanguard/cereale#installation)
 [![License: MIT](https://img.shields.io/badge/license-MIT-a0784a)](LICENSE)
 
@@ -75,7 +75,7 @@ entity, anything with behaviour attached. Reach for Zod when you just want the d
 - **Nothing fails quietly:** a misconfigured compiler, a cycle, or a value JSON cannot carry
   raises an error that names the cause — never an empty object.
 - **Sync and async:** every entry point has a synchronous twin.
-- **Zero dependencies**, ESM + CJS, Node 20+.
+- **Zero dependencies**, ESM + CJS, Node 22+.
 
 ## Installation
 
@@ -97,7 +97,7 @@ Cereale uses **TC39 standard decorators** (since 0.2.0), so no `experimentalDeco
 }
 ```
 
-Requires TypeScript 5.2+ and Node 20+. `reflect-metadata` is not needed and
+Requires TypeScript 5.2+ and Node 22+. `reflect-metadata` is not needed and
 `emitDecoratorMetadata` is not read.
 
 `experimentalDecorators` must be **off**. The two decorator systems cannot coexist in one
