@@ -1,7 +1,7 @@
-# Contrôles qualité de chaque push et de chaque PR par le workflow commun avalon-vanguard/ci :
-# secrets (gitleaks), dépendances vulnérables (osv-scanner), duplication (jscpd) et failles du code
-# (semgrep). Gitleaks et semgrep ne regardent que le diff, jamais l'existant.
-name: Qualité
+# Quality checks on every push and every PR through the shared avalon-vanguard/ci workflow:
+# secrets (gitleaks), vulnerable dependencies (osv-scanner), duplication (jscpd) and code flaws
+# (semgrep). Gitleaks and semgrep only look at the diff, never at existing code.
+name: quality
 
 on:
   push:

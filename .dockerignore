@@ -1,4 +1,4 @@
-# Seuls la page construite et la configuration nginx entrent dans l'image
+# Only the built page and the nginx config go into the image
 *
 !docs
 !nginx.conf

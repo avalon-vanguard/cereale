@@ -1,6 +1,6 @@
-# Contrôles de CI sur Gitea, par le workflow commun avalon-vanguard/ci.
-# GitHub (miroir en lecture seule) n'exécute plus que Pages et la publication npm. Les contrôles post-build (points d'entrée, démo, types publiés,
-# page de docs) sont regroupés dans le script « check ».
+# CI checks on Gitea, through the shared avalon-vanguard/ci workflow.
+# GitHub (read-only mirror) now only runs Pages and the npm publish. The post-build checks (entry points, demo, published types,
+# docs page) are grouped in the "check" script.
 #
 # The job runs "npm run test:coverage" and fails below 80 % total line coverage, read from
 # coverage/coverage-summary.json (default floor of node.yml@v2).

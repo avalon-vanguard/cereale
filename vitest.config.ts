@@ -15,7 +15,7 @@ export default defineConfig({
       reporter: ['text', 'lcov', 'json-summary'],
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.test.ts', 'src/example.ts', 'src/index.ts'],
-      // Mesuré : 96,69 / 91,62 / 99,64 / 97,95 — seuil = plancher − 1.
+      // Measured: 96.69 / 91.62 / 99.64 / 97.95 — threshold = floor − 1.
       thresholds: { statements: 95, branches: 90, functions: 98, lines: 96 },
     },
   },

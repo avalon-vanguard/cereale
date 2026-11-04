@@ -1,4 +1,4 @@
-# Relecture de chaque PR par Junie (JetBrains) : avalon-vanguard/ci/.gitea/workflows/junie-review.yml.
+# Junie (JetBrains) review of each PR: avalon-vanguard/ci/.gitea/workflows/junie-review.yml.
 name: Junie review
 
 on:

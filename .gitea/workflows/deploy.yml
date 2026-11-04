@@ -1,8 +1,8 @@
-# Construit l'image de cereale, la pousse dans le registre Gitea et la déploie dans Openship :
-# service interne, sans domaine, que la passerelle projects.avalonvanguard.com sert sous /cereale/.
-# Service « cereale » du projet Openship « projects », à côté de la passerelle : image.yml ne déploie
-# que ce service. Secret : OPENSHIP_API_TOKEN de l'organisation, qui couvre « projects » ; pas de
-# secret de dépôt du même nom, il masquerait celui-ci.
+# Builds the cereale image, pushes it to the Gitea registry and deploys it to Openship:
+# an internal service, no domain, which the projects.avalonvanguard.com gateway serves under /cereale/.
+# "cereale" service of the Openship "projects" project, next to the gateway: image.yml deploys only
+# this service. Secret: the organization's OPENSHIP_API_TOKEN, which covers "projects"; no
+# repository secret of the same name, it would shadow this one.
 name: Deploy
 
 on:
