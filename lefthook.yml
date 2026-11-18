@@ -1,0 +1,58 @@
+# Local git hooks, synced from avalon-vanguard/ci (templates/all). Edit it there.
+# Repo additions go in lefthook-local.yml, committed here (unlike lefthook's usual gitignore
+# convention); its commands merge into these by name.
+# Same checks as CI (quality.yml), run early. CI stays the gate: a missing tool warns and passes.
+# Bypass once with LEFTHOOK=0. Set up the tools with scripts/install_dev_hooks.sh in avalon-vanguard/ci.
+# Scripts use sh and no double quotes: on Windows lefthook wraps run in double quotes unescaped.
+min_version: 2.2.2
+
+pre-commit:
+  commands:
+    gitleaks:
+      run: |
+        command -v gitleaks >/dev/null 2>&1 || { echo 'lefthook: gitleaks not found, skipped - CI is the gate'; exit 0; }
+        gitleaks git --pre-commit --redact --staged --verbose
+
+pre-push:
+  parallel: true
+  commands:
+    osv:
+      run: |
+        command -v osv-scanner >/dev/null 2>&1 || { echo 'lefthook: osv-scanner not found, skipped - CI is the gate'; exit 0; }
+        # Blocks only if the repo calls quality.yml (CI blocks too) and does not set osv-blocking: false.
+        blocking=0
+        grep -Eqs '^\s*uses:.*quality\.yml@' .gitea/workflows/*.yml .github/workflows/*.yml && blocking=1
+        grep -Eqs '^\s+osv-blocking:\s*false' .gitea/workflows/*.yml .github/workflows/*.yml && blocking=0
+        # A repo osv-scanner.toml is loaded by the tool and replaces the shared list, as in CI.
+        if [ -e osv-scanner.toml ]; then set --; else set -- --config .gitea/osv-org.toml; fi
+        rc=0
+        timeout 120 osv-scanner scan source -r --allow-no-lockfiles $@ . || rc=$?
+        if [ $rc = 0 ]; then exit 0; fi
+        if [ $rc = 1 ] && [ $blocking = 1 ]; then exit 1; fi
+        echo lefthook: osv-scanner exited $rc, warning only - CI is the gate
+    jscpd:
+      run: |
+        command -v npx >/dev/null 2>&1 || { echo 'lefthook: npx not found, jscpd skipped - CI is the gate'; exit 0; }
+        # First uncommented block value of the caller input, same defaults as quality.yml.
+        val() { cat .gitea/workflows/*.yml .github/workflows/*.yml 2>/dev/null | sed -n 's/^[[:space:]]\+'$1':[[:space:]]*\([^[:space:]#]\+\).*/\1/p' | head -n 1 | tr -d '\042\047'; }
+        dir=$(val jscpd-path); dir=${dir:-src}
+        max=$(val jscpd-threshold); max=${max:-5}
+        if [ ! -e $dir ]; then echo lefthook: $dir absent, jscpd skipped; exit 0; fi
+        blocking=0
+        grep -Eqs '^\s*uses:.*quality\.yml@' .gitea/workflows/*.yml .github/workflows/*.yml && blocking=1
+        log=$(mktemp)
+        rc=0
+        npm_config_ignore_scripts=true npx --yes jscpd@5.4.0 --threshold $max --ignore '**/*.spec.ts,**/*.test.ts,**/messages.json,**/node_modules/**,**/dist/**' $dir >$log 2>&1 || rc=$?
+        cat $log
+        # Block on a duplication finding only: an npx or network failure also exits 1.
+        found=0; grep -q 'too many duplicates' $log && found=1
+        rm -f $log
+        if [ $rc = 0 ]; then exit 0; fi
+        if [ $found = 1 ] && [ $blocking = 1 ]; then exit 1; fi
+        echo lefthook: jscpd exited $rc, warning only - CI is the gate
+    knip:
+      run: |
+        [ -f package.json ] || exit 0
+        command -v npx >/dev/null 2>&1 || { echo 'lefthook: npx not found, knip skipped'; exit 0; }
+        npm_config_ignore_scripts=true npx --yes knip@6.42.1 || echo lefthook: knip reported problems, advisory only
+        exit 0

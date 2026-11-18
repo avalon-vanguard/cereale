@@ -51,6 +51,10 @@ User-facing UI: English source strings with a French translation (i18n).
 Be green before pushing: run the repo's lint, typecheck, test and build. See `CLAUDE.md` for
 the exact commands.
 
+`lefthook.yml` runs gitleaks on commit, and osv-scanner, jscpd (both as in CI) and an advisory knip on push;
+install the tools with `scripts/install_dev_hooks.sh` from `avalon-vanguard/ci`. A missing tool only
+warns. Skip the hooks once with `LEFTHOOK=0 git push`; CI still blocks.
+
 ## Coding principles
 
 - Simplest thing that works. No speculative code, option or abstraction; add it when a second
@@ -114,14 +118,27 @@ the exact commands.
 - These gates (`quality`, coverage, `lighthouse`) are switched on per repo in its alignment PR
   (see `avalon-vanguard/ci` `docs/rollout.md`); until then, run the same checks locally before
   pushing.
-- Junie's review is advisory but must be answered: fix, or reply why not.
+- Every repo must have CI callers for `rules`, `quality`, Junie review and its stack check (node,
+  python, dotnet, go; Angular, Supabase and `none` add nothing, and a `none` repo with something
+  to execute names that workflow as `test_workflow` in `repos.json`). A repo can add on top, never
+  narrow: each caller runs on every PR, with no `paths` or `branches` filter and no `if`, `needs`
+  or `continue-on-error`. Stack CI runs tests only where they exist, so Node needs a `test` script
+  in the root `package.json` and Python a `tests/` directory.
+- The `rules` check shows these workflows exist and run on every PR, not what they test
+  (`echo ok` passes) nor their `with:` inputs. A workflow Gitea refuses to run, or one disabled in
+  the UI, is not seen: required status checks cover that. YAML written to confuse the reader is
+  rejected or out of its reach.
+- The Junie review caller is required, but its verdict is advisory and must be answered: fix, or
+  reply why not.
 - A PR does one thing; refactors go in their own PR.
 
 ## Synced files
 
 `AGENTS.md`, `.editorconfig` and `.gitattributes` (above the `# --- local (not synced) ---`
-line), `.gitea/pull_request_template.md`, `.gitea/workflows/rules.yml`, `.agents/` (per-stack
-rules) and `ruff.toml` (Python repos) come from `avalon-vanguard/ci`. Change them there, never
-in this repo.
+line), `.gitea/pull_request_template.md`, `.gitea/workflows/rules.yml`,
+`.gitea/workflows/junie-review.yml`, `.gitea/workflows/claude-issues.yml`, `lefthook.yml`,
+`.gitea/osv-org.toml`, `.agents/` (per-stack rules) and `ruff.toml` (Python repos) come from
+`avalon-vanguard/ci`. Change them there, never in this repo. Repo-specific hooks go in
+`lefthook-local.yml`, which is committed here, contrary to lefthook's usual gitignore convention.
 
 Stack rules: see `.agents/`.

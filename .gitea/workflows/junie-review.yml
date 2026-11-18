@@ -1,4 +1,4 @@
-# Junie (JetBrains) review of each PR: avalon-vanguard/ci/.gitea/workflows/junie-review.yml.
+# Managed file, synced from avalon-vanguard/ci. Change it there, not here.
 name: Junie review
 
 on:
@@ -7,6 +7,8 @@ on:
 
 jobs:
   review:
-    uses: avalon-vanguard/ci/.gitea/workflows/junie-review.yml@v1
+    uses: avalon-vanguard/ci/.gitea/workflows/junie-review.yml@v2
     secrets:
       JUNIE_DOPBASE_TOKEN: ${{ secrets.JUNIE_DOPBASE_TOKEN }}
+      CLAUDE_DOPBASE_TOKEN: ${{ secrets.CLAUDE_DOPBASE_TOKEN }}
+      CLAUDE_GITEA_TOKEN: ${{ secrets.CLAUDE_GITEA_TOKEN }}

@@ -1,0 +1,18 @@
+# Dev tooling (eslint, jest, karma…): the patterns and merged objects come from the repository,
+# not from an attacker. Fixed only in major versions that the tools do not accept.
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-02-01
+reason = "minimatch: DoS through a controlled pattern; dev tooling, fixed only in 11.x"
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+ignoreUntil = 2027-02-01
+reason = "glob: traversal after AbortSignal; dev tooling, fixed only in 14.x"
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-02-01
+reason = "deepmerge: prototype pollution; dev tooling, no fixed version"
+[[IgnoredVulns]]
+id = "GHSA-fc5q-39xc-vjpf"
+ignoreUntil = 2027-02-01
+reason = "picomatch: ReDoS through a controlled glob; build tooling, no fixed version"

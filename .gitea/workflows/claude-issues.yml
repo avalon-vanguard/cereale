@@ -1,0 +1,13 @@
+# Managed file, synced from avalon-vanguard/ci. Change it there, not here.
+name: Claude issues
+
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  claude:
+    uses: avalon-vanguard/ci/.gitea/workflows/claude-issue-agent.yml@v2
+    secrets:
+      CLAUDE_DOPBASE_TOKEN: ${{ secrets.CLAUDE_DOPBASE_TOKEN }}
+      CLAUDE_GITEA_TOKEN: ${{ secrets.CLAUDE_GITEA_TOKEN }}
